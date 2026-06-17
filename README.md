@@ -17,16 +17,16 @@ sequenceDiagram
     participant A as Endpoint A (priority 0)
     participant B as Endpoint B (priority 1)
 
-    App->>Pool: POST / eth_call
+    App->>Pool: POST eth_call
     Pool->>A: forward eth_call
     A-->>Pool: HTTP 429 Too Many Requests
-    Note over Pool: non-2xx = failure;<br/>record_failure on A
+    Note over Pool,A: non-2xx counts as a failure for A
     Pool->>B: fail over to next healthy, capable endpoint
     B-->>Pool: HTTP 200 result
     Pool-->>App: JSON-RPC result (one success wins)
 
-    Note over Pool,A: After demotion_threshold (default 2)<br/>consecutive failures, A is demoted and<br/>enters exponential backoff cooldown<br/>(base 2s, doubling, capped at 300s).
-    Note over Pool,A: Calls skip A while it is in cooldown.<br/>One success on A resets its counter<br/>and restores it to rotation.
+    Note over Pool,A: after 2 consecutive failures A is demoted into exponential backoff (2s, doubling, capped at 300s)
+    Note over Pool,A: A is skipped while cooling down, one success restores it
 ```
 
 - **Unbounded, priority-ordered pool.** Lower `priority` is tried first; ties break by config order.
