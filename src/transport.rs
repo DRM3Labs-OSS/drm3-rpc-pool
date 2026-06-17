@@ -7,14 +7,23 @@
 
 use async_trait::async_trait;
 
+pub use crate::send_sync::MaybeSendSync;
+
 /// Minimal HTTP transport contract.
 ///
 /// Implementations must:
 /// - Send `body` as the POST body with `Content-Type: application/json`.
 /// - Return the raw response bytes on 2xx.
 /// - Return `Err(..)` on any transport failure or non-2xx status.
-#[async_trait]
-pub trait Transport: Send + Sync + 'static {
+///
+/// On native targets the trait (and the futures it returns) are `Send + Sync`
+/// so the pool can be shared across threads/tasks. On `wasm32` the browser
+/// `fetch` future is not `Send` (it holds `JsValue`s), so the bounds are
+/// relaxed and `async_trait` is asked to emit `?Send` futures. Both paths share
+/// the exact same method signatures, so the pool code is target-agnostic.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait Transport: MaybeSendSync + 'static {
     /// Dispatch a JSON-RPC payload to `url`. Returns the raw response body.
     async fn post_json(&self, url: &str, body: Vec<u8>) -> Result<Vec<u8>, String>;
 

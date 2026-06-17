@@ -5,11 +5,16 @@
 
 use std::time::Duration;
 
+use crate::send_sync::MaybeSendSync;
+
 /// Hook fired by the pool at key lifecycle points.
 ///
 /// `endpoint_tag` is either the endpoint label (if configured) or the URL —
 /// same as `RpcEndpoint::tag()`.
-pub trait Metrics: Send + Sync + 'static {
+///
+/// `MaybeSendSync` is `Send + Sync` on native and a no-op on wasm, so a wasm
+/// metrics sink that touches `JsValue` is still allowed.
+pub trait Metrics: MaybeSendSync + 'static {
     /// Called just before a request is dispatched to a specific endpoint.
     fn on_request(&self, endpoint_tag: &str, method: &str);
 

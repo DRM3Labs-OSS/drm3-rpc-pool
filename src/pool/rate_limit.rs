@@ -5,9 +5,8 @@
 //! is non-blocking: if no token is available the caller should skip the
 //! endpoint and fail over, rather than stalling the whole request.
 
-use std::time::Instant;
-
 use parking_lot::Mutex;
+use web_time::Instant;
 
 #[derive(Debug)]
 pub(super) struct RateLimiter {

@@ -7,7 +7,10 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+#[cfg(feature = "reqwest-transport")]
+use std::time::Duration;
+
+use web_time::Instant;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -419,6 +422,11 @@ impl RpcPool {
     /// Dispatch with a hard deadline. Fails with a transport error if no
     /// endpoint responds in time. Provided for completeness; the inner
     /// transport is already expected to time out on its own.
+    ///
+    /// Native-only: it relies on `tokio::time`. wasm consumers should rely on
+    /// the per-request transport timeout (the `FetchTransport` aborts the
+    /// underlying `fetch` after its configured deadline).
+    #[cfg(feature = "reqwest-transport")]
     pub async fn call_with_timeout(
         &self,
         method: &str,

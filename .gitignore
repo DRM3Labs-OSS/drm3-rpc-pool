@@ -1,4 +1,9 @@
 /target
+# wasm binding build artifacts (its own workspace + wasm-pack output)
+bindings/wasm/target
+bindings/wasm/pkg
+bindings/wasm/pkg-bundler
+bindings/wasm/pkg-node
 **/*.rs.bk
 *.swp
 .DS_Store

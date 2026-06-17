@@ -3,10 +3,11 @@
 //! Counts consecutive failures and gates retries on an exponentially-growing
 //! cooldown. One success resets the counter.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use serde::Serialize;
+use web_time::Instant;
 
 /// Parameters for the backoff curve. Kept here so tests can construct a fast
 /// variant without monkey-patching timing.

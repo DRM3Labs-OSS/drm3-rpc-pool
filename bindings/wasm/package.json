@@ -1,0 +1,28 @@
+{
+  "//": "Reference manifest for the published npm package. wasm-pack regenerates pkg/package.json from Cargo.toml on every build; the `npm run pkg:name` script (and the CI workflow) rewrites the generated pkg/package.json `name` to this scoped name and copies README.md in before publish. This file documents the intended published shape.",
+  "name": "@drm3labs-oss/rpc-pool",
+  "version": "0.1.0",
+  "description": "Resilient JSON-RPC failover pool for any EVM chain, compiled to WASM. Runs failover, per-endpoint health, backoff, and capability routing in the browser or Node; the network is done by the platform fetch.",
+  "type": "module",
+  "license": "MIT",
+  "main": "drm3_rpc_pool_wasm.js",
+  "types": "drm3_rpc_pool_wasm.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DRM3Labs-OSS/rpc-pool"
+  },
+  "keywords": ["evm", "rpc", "ethereum", "failover", "wasm", "browser", "drm3"],
+  "files": [
+    "drm3_rpc_pool_wasm_bg.wasm",
+    "drm3_rpc_pool_wasm.js",
+    "drm3_rpc_pool_wasm.d.ts",
+    "drm3_rpc_pool_wasm_bg.wasm.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build:web": "wasm-pack build --target web --out-dir pkg",
+    "build:bundler": "wasm-pack build --target bundler --out-dir pkg-bundler",
+    "build:node": "wasm-pack build --target nodejs --out-dir pkg-node",
+    "pkg:finalize": "node finalize-pkg.mjs"
+  }
+}

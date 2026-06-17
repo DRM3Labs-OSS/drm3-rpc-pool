@@ -1,0 +1,56 @@
+# Standalone wasm binding crate for drm3-rpc-pool.
+#
+# This is its OWN workspace (the empty [workspace] table below) so it is fully
+# decoupled from the core crate's `cargo test`/`cargo build` runs. The core
+# crate stays clean and native; this crate only ever builds for wasm32 via
+# `wasm-pack build bindings/wasm`.
+[workspace]
+
+[package]
+name = "drm3-rpc-pool-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Browser + Node WASM binding for drm3-rpc-pool: a resilient JSON-RPC failover pool driven by the platform `fetch`."
+license = "MIT"
+repository = "https://github.com/DRM3Labs-OSS/rpc-pool"
+authors = ["DRM3 Labs Corp. <support@drm3.io>"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Core pool logic with reqwest + tokio + the daemon dropped. The pluggable
+# Transport trait is what we drive from `fetch`.
+drm3-rpc-pool = { path = "../..", default-features = false }
+
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+# gloo-timers is available for any future sleep-based backoff. The pool's
+# current backoff is *time-gated* (web-time::Instant compares cooldowns and
+# skips endpoints that are still cooling down) rather than sleep-based, so no
+# wasm timer is needed on the hot path today. Kept declared as the documented
+# wasm-compatible timer per the design.
+gloo-timers = { version = "0.3", features = ["futures"] }
+async-trait = "0.1"
+# Better panic messages in the browser console.
+console_error_panic_hook = "0.1"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "Headers",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "Response",
+  "Window",
+  "WorkerGlobalScope",
+]
+
+[profile.release]
+opt-level = "s"
+lto = true

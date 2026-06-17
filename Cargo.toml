@@ -21,7 +21,8 @@ required-features = ["daemon"]
 [features]
 default = ["reqwest-transport", "daemon"]
 # Bundled HTTP transport using reqwest. Off -> caller supplies Transport impl.
-reqwest-transport = ["reqwest"]
+# Pulls in tokio because the reqwest path and `call_with_timeout` rely on it.
+reqwest-transport = ["reqwest", "dep:tokio"]
 # The language-agnostic proxy daemon (HTTP server + CLI). Pulls in axum + clap.
 daemon = ["reqwest-transport", "axum", "clap", "tracing-subscriber", "tokio/full"]
 
@@ -31,10 +32,15 @@ serde_json = "1"
 toml = "0.8"
 thiserror = "1"
 tracing = "0.1"
-tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+# tokio is only needed by the native reqwest transport / daemon. wasm consumers
+# build with `default-features = false` and never pull it in.
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false, optional = true }
 async-trait = "0.1"
 parking_lot = "0.12"
+# Drop-in `Instant`/`SystemTime` that works on both native and wasm32. On native
+# it re-exports `std::time`; on wasm it uses the browser `performance.now()`.
+web-time = "1"
 # Daemon-only dependencies.
 axum = { version = "0.7", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }

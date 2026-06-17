@@ -29,6 +29,7 @@ pub mod pool;
 pub mod presets;
 #[cfg(feature = "daemon")]
 pub mod proxy;
+pub mod send_sync;
 pub mod transport;
 
 pub use config::{expand_env, Auth, RpcCapability, RpcEndpoint, RpcPoolConfig, DEFAULT_LISTEN};
