@@ -1,11 +1,22 @@
-# Dormant release workflow.
+# Release workflow.
 #
-# Requires the `CARGO_REGISTRY_TOKEN` repo secret (an API token from
-# https://crates.io/me) and a public repository.
+# Pushing a `vX.Y.Z` tag to the PUBLIC repository creates a full release:
+#   1. `binaries`     — cross-compiles the `drm3-rpc-pool` proxy binary for
+#                        linux (x64 + arm64), macos (x64 + arm64), and windows
+#                        (x64), then uploads each artifact plus SHA256SUMS to a
+#                        GitHub Release. Non-Rust users get prebuilt binaries
+#                        straight from the Releases page.
+#   2. `crates`       — `cargo publish` to crates.io. Needs the
+#                        `CARGO_REGISTRY_TOKEN` repo secret (token from
+#                        https://crates.io/me). Claims the `drm3-rpc-pool` name
+#                        PERMANENTLY; a version can never be re-published.
+#   3. `npm`          — builds the wasm package and `npm publish`es the scoped
+#                        `@drm3labs-oss/rpc-pool` package. Needs the `NPM_TOKEN`
+#                        repo secret with publish rights to the @drm3labs-oss
+#                        scope, and a PUBLIC repo (public scoped package).
 #
-# Publishing claims the `drm3-rpc-pool` crate name on crates.io PERMANENTLY.
-# A given version can never be re-published or unpublished. Bump the version in
-# Cargo.toml, then push a matching `vX.Y.Z` tag to trigger this workflow.
+# Before tagging: bump the version in Cargo.toml (and bindings/wasm), confirm
+# the two secrets exist, then `git tag vX.Y.Z && git push --tags`.
 name: Release
 
 on:
@@ -13,8 +24,102 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  publish:
+  # ── Prebuilt proxy binaries for every platform → GitHub Release ──────
+  binaries:
+    name: binary (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # The linux aarch64 target needs a cross linker on the x64 runner.
+      - name: Install aarch64 linux linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          mkdir -p .cargo
+          {
+            echo '[target.aarch64-unknown-linux-gnu]'
+            echo 'linker = "aarch64-linux-gnu-gcc"'
+          } >> .cargo/config.toml
+
+      - name: Build proxy binary
+        run: cargo build --release --locked --bin drm3-rpc-pool --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          BIN=target/${{ matrix.target }}/release/drm3-rpc-pool
+          OUT=drm3-rpc-pool-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          tar -czf "$OUT" -C "target/${{ matrix.target }}/release" drm3-rpc-pool
+          shasum -a 256 "$OUT" > "$OUT.sha256"
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "target/${{ matrix.target }}/release/drm3-rpc-pool.exe"
+          $out = "drm3-rpc-pool-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          Compress-Archive -Path $bin -DestinationPath $out
+          (Get-FileHash $out -Algorithm SHA256).Hash.ToLower() + "  " + $out | Out-File -Encoding ascii "$out.sha256"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            drm3-rpc-pool-${{ github.ref_name }}-${{ matrix.target }}.*
+
+  # ── Aggregate SHA256SUMS across all platforms ───────────────────────
+  checksums:
+    name: SHA256SUMS
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern '*.sha256' --dir sums
+          cat sums/*.sha256 | sort > SHA256SUMS
+
+      - name: Upload SHA256SUMS
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SHA256SUMS
+
+  # ── crates.io ───────────────────────────────────────────────────────
+  crates:
     name: cargo publish
     runs-on: ubuntu-latest
     steps:
@@ -25,4 +130,35 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: publish
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ── npm (wasm package) ──────────────────────────────────────────────
+  npm:
+    name: npm publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build (web target)
+        run: wasm-pack build bindings/wasm --target web
+
+      - name: Finalize package (scoped name + README)
+        run: node bindings/wasm/finalize-pkg.mjs
+
+      - name: Publish to npm
+        run: npm publish --access public
+        working-directory: bindings/wasm/pkg
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

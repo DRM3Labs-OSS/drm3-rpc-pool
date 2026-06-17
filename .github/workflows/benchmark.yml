@@ -1,0 +1,97 @@
+# Throughput benchmark — auto-generated, real-network results.
+#
+# Runs the `throughput` example two ways and writes the result into the README
+# "Results" section plus an SVG bar chart in assets/benchmark.svg, then commits
+# both back as github-actions[bot].
+#
+# IMPORTANT: the two modes run in SEPARATE jobs so they land on SEPARATE runners
+# (separate egress IPs). Public RPCs are IP-rate-limited, so running both modes
+# from one IP would let them squash each other's limits and ruin the comparison.
+#
+# These are honest field numbers against FREE public endpoints (no key). They
+# vary with live public-RPC conditions and are timestamped. Adding a keyed
+# provider raises the ceiling well past these defaults.
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: "Chain preset to benchmark"
+        default: "base"
+      requests:
+        description: "Total requests per mode"
+        default: "300"
+      concurrency:
+        description: "Concurrent in-flight requests"
+        default: "50"
+  schedule:
+    # Weekly, Monday 06:00 UTC.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    name: ${{ matrix.mode }} (own runner / own IP)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [single, pool]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run throughput (${{ matrix.mode }})
+        run: |
+          cargo run --release --example throughput -- \
+            --mode ${{ matrix.mode }} \
+            --chain "${{ github.event.inputs.chain || 'base' }}" \
+            --requests "${{ github.event.inputs.requests || '300' }}" \
+            --concurrency "${{ github.event.inputs.concurrency || '50' }}" \
+            | tee result-${{ matrix.mode }}.json
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.mode }}
+          path: result-${{ matrix.mode }}.json
+
+  publish:
+    name: chart + README
+    needs: run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download single result
+        uses: actions/download-artifact@v4
+        with:
+          name: result-single
+          path: results
+
+      - name: Download pool result
+        uses: actions/download-artifact@v4
+        with:
+          name: result-pool
+          path: results
+
+      - name: Generate chart + README block
+        run: node .github/scripts/render-benchmark.mjs results/result-single.json results/result-pool.json
+
+      - name: Commit results back
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- README.md assets/benchmark.svg; then
+            echo "no benchmark changes"
+            exit 0
+          fi
+          git add README.md assets/benchmark.svg
+          git commit -m "bench: refresh throughput results (auto, real-network)"
+          git push

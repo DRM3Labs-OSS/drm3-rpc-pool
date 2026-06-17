@@ -1,4 +1,4 @@
-# AGENTS.md — drm3-rpc-pool
+# AGENTS.md - drm3-rpc-pool
 
 Operational, as-built guide. Enough to run the proxy or use the library
 immediately.
@@ -8,10 +8,10 @@ immediately.
 A config-driven, language-agnostic JSON-RPC failover **proxy** for any EVM chain,
 plus the Rust library underneath it. Two ways to use it:
 
-1. **Proxy daemon (`drm3-rpc-pool`)** — an HTTP server. Point any app, in any
+1. **Proxy daemon (`drm3-rpc-pool`)** - an HTTP server. Point any app, in any
    language, at its `listen` address as the RPC URL. Every request is dispatched
    through the pool with first-success-wins failover.
-2. **Rust library (`drm3_rpc_pool`)** — embed `RpcPool` directly.
+2. **Rust library (`drm3_rpc_pool`)** - embed `RpcPool` directly.
 
 No chain-specific code: every capability is a generic `eth_*` method.
 
@@ -27,7 +27,7 @@ The `daemon` feature (default-on) builds the binary; `reqwest-transport`
 custom transport: `cargo build --no-default-features --features reqwest-transport`
 or drop `reqwest-transport` too and implement `Transport` yourself.
 
-## Run — the proxy
+## Run - the proxy
 
 ```sh
 drm3-rpc-pool init base > rpc-pool.toml   # scaffold from a preset
@@ -37,16 +37,16 @@ drm3-rpc-pool --config rpc-pool.toml       # run (defaults to ./rpc-pool.toml)
 
 CLI surface (clap):
 
-- `drm3-rpc-pool [--config <path>]` — run the proxy. No subcommand = serve.
+- `drm3-rpc-pool [--config <path>]` - run the proxy. No subcommand = serve.
   `--config`/`-c` defaults to `./rpc-pool.toml`.
-- `drm3-rpc-pool init <chain>` — print a starter config to stdout. Chains:
+- `drm3-rpc-pool init <chain>` - print a starter config to stdout. Chains:
   `base`, `ethereum`, `arbitrum`, `optimism`, `polygon`, `bnb` (aliases
   `eth`/`mainnet`, `arb`, `op`, `matic`, `bsc`).
 - `--version` from the crate version.
 
 Logging: `tracing` via `RUST_LOG`/`EnvFilter`, default `drm3_rpc_pool=info,info`.
 
-### Run — Docker
+### Run - Docker
 
 ```sh
 docker build -t drm3-rpc-pool .
@@ -62,13 +62,13 @@ container. Multi-stage build, runs as non-root uid 10001, rustls (CA certs only)
 
 ## HTTP endpoints (proxy)
 
-- `POST /` — JSON-RPC. Single object or batch array. Preserves the client `id`.
+- `POST /` - JSON-RPC. Single object or batch array. Preserves the client `id`.
   Relays upstream error envelopes; pool errors map to `-32010` (all upstreams
   failed), `-32011` (no healthy endpoints), `-32603` (other), `-32600` (missing
   method).
-- `GET /health` — `200 {status, endpoints_total, endpoints_healthy}` when the
+- `GET /health` - `200 {status, endpoints_total, endpoints_healthy}` when the
   pool has endpoints, else `503`.
-- `GET /metrics` — `{ endpoints: [...] }` per-endpoint definition + live health.
+- `GET /metrics` - `{ endpoints: [...] }` per-endpoint definition + live health.
 
 ## Config (TOML)
 
@@ -86,7 +86,7 @@ URL, no extra headers), `header` (`{ name, value }`), `bearer` (`{ token }`).
 Every string field supports `${ENV_VAR}` templating; an unset referenced var is
 a hard error. See [`examples/rpc-pool.toml`](./examples/rpc-pool.toml).
 
-## Use — the library
+## Use - the library
 
 ```rust
 use drm3_rpc_pool::{RpcPool, RpcPoolConfig};
@@ -107,16 +107,16 @@ backoff). Dispatch: `pool.call(method, params) -> Value`,
 
 ## Module layout (`src/`)
 
-- `main.rs` — CLI + proxy bootstrap (clap, tokio, tracing).
-- `lib.rs` — public re-exports; feature gating.
-- `config.rs` — `RpcPoolConfig`, `RpcEndpoint`, `Auth`, `RpcCapability`, env templating.
-- `presets.rs` — per-chain public endpoint lists + name/alias resolution.
-- `proxy.rs` — axum router, `POST /`, `/health`, `/metrics` (feature `daemon`).
-- `pool/` — `mod.rs` (dispatch/failover), `rate_limit.rs`, `wire.rs`, `tests.rs`.
-- `health.rs` — `BackoffPolicy`, `EndpointHealth`, demotion/cooldown.
-- `transport.rs` — `Transport` trait + bundled `ReqwestTransport`.
-- `metrics.rs` — `Metrics` trait + `NoopMetrics`.
-- `error.rs` — `RpcError`.
+- `main.rs` - CLI + proxy bootstrap (clap, tokio, tracing).
+- `lib.rs` - public re-exports; feature gating.
+- `config.rs` - `RpcPoolConfig`, `RpcEndpoint`, `Auth`, `RpcCapability`, env templating.
+- `presets.rs` - per-chain public endpoint lists + name/alias resolution.
+- `proxy.rs` - axum router, `POST /`, `/health`, `/metrics` (feature `daemon`).
+- `pool/` - `mod.rs` (dispatch/failover), `rate_limit.rs`, `wire.rs`, `tests.rs`.
+- `health.rs` - `BackoffPolicy`, `EndpointHealth`, demotion/cooldown.
+- `transport.rs` - `Transport` trait + bundled `ReqwestTransport`.
+- `metrics.rs` - `Metrics` trait + `NoopMetrics`.
+- `error.rs` - `RpcError`.
 
 ## Failover semantics
 

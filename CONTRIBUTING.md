@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are welcome — open an issue or a PR. Bug fixes, new chain presets,
+Contributions are welcome - open an issue or a PR. Bug fixes, new chain presets,
 docs improvements, and ideas are all appreciated.
 
 ## Quick start
