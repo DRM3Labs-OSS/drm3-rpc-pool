@@ -42,7 +42,7 @@ parking_lot = "0.12"
 # it re-exports `std::time`; on wasm it uses the browser `performance.now()`.
 web-time = "1"
 # Daemon-only dependencies.
-axum = { version = "0.7", optional = true }
+axum = { version = "0.8", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 
