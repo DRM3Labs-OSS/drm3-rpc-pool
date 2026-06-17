@@ -1,0 +1,63 @@
+# drm3-rpc-pool — sample proxy config.
+#
+# Run with:   drm3-rpc-pool --config examples/rpc-pool.toml
+# Generate a fresh one from a preset:   drm3-rpc-pool init base > rpc-pool.toml
+#
+# Secrets NEVER live in this file. Use ${ENV_VAR} templating; the referenced
+# variable must be set in the environment or the proxy refuses to start.
+
+# Address the proxy binds to. Use 0.0.0.0 inside Docker so it is reachable.
+listen = "127.0.0.1:8545"
+
+# Per-request timeout (ms) applied to each upstream attempt.
+request_timeout_ms = 8000
+
+# Max upstreams to try per call. 0 = try every healthy, capable endpoint.
+max_retries = 0
+
+# ── Keyed providers first (lowest priority = tried first) ──────────────
+
+# Alchemy: the key is baked into the URL. `url_key` is a declarative marker
+# that the URL itself carries the secret; no extra headers are added.
+[[endpoints]]
+url = "https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
+label = "alchemy-base"
+priority = 0
+max_rps = 25
+auth = { type = "url_key" }
+
+# Infura via a custom API-key header.
+[[endpoints]]
+url = "https://base-mainnet.infura.io/v3/${INFURA_PROJECT_ID}"
+label = "infura-base"
+priority = 1
+max_rps = 10
+auth = { type = "url_key" }
+
+# A provider that wants a bearer token.
+[[endpoints]]
+url = "https://rpc.example-provider.com"
+label = "example-bearer"
+priority = 2
+auth = { type = "bearer", token = "${EXAMPLE_RPC_TOKEN}" }
+
+# A provider that wants a custom header.
+[[endpoints]]
+url = "https://rpc.another-provider.com"
+label = "another-header"
+priority = 3
+# Restrict this endpoint to read methods only.
+capabilities = ["eth_call", "eth_getLogs", "eth_blockNumber", "eth_chainId"]
+auth = { type = "header", name = "X-API-Key", value = "${ANOTHER_RPC_KEY}" }
+
+# ── Free public endpoints as failover (highest priority numbers) ───────
+
+[[endpoints]]
+url = "https://mainnet.base.org"
+label = "base-official"
+priority = 10
+
+[[endpoints]]
+url = "https://base.llamarpc.com"
+label = "base-llamarpc"
+priority = 11

@@ -1,0 +1,28 @@
+# Dormant release workflow.
+#
+# Requires the `CARGO_REGISTRY_TOKEN` repo secret (an API token from
+# https://crates.io/me) and a public repository.
+#
+# Publishing claims the `drm3-rpc-pool` crate name on crates.io PERMANENTLY.
+# A given version can never be re-published or unpublished. Bump the version in
+# Cargo.toml, then push a matching `vX.Y.Z` tag to trigger this workflow.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: cargo publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: publish
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}

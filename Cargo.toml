@@ -1,0 +1,49 @@
+[package]
+name = "drm3-rpc-pool"
+version = "0.1.0"
+edition = "2021"
+description = "Resilient JSON-RPC failover pool for any EVM chain. Unbounded ordered endpoint list, per-endpoint health + backoff, capability routing, first-success-wins dispatch."
+license = "MIT"
+repository = "https://github.com/DRM3Labs-OSS/rpc-pool"
+keywords = ["evm", "rpc", "ethereum", "failover", "drm3"]
+categories = ["api-bindings", "network-programming"]
+authors = ["DRM3 Labs Corp. <support@drm3.io>", "Robert Christian (@robertjchristian)"]
+
+[lib]
+name = "drm3_rpc_pool"
+path = "src/lib.rs"
+
+[[bin]]
+name = "drm3-rpc-pool"
+path = "src/main.rs"
+required-features = ["daemon"]
+
+[features]
+default = ["reqwest-transport", "daemon"]
+# Bundled HTTP transport using reqwest. Off -> caller supplies Transport impl.
+reqwest-transport = ["reqwest"]
+# The language-agnostic proxy daemon (HTTP server + CLI). Pulls in axum + clap.
+daemon = ["reqwest-transport", "axum", "clap", "tracing-subscriber", "tokio/full"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "1"
+tracing = "0.1"
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false, optional = true }
+async-trait = "0.1"
+parking_lot = "0.12"
+# Daemon-only dependencies.
+axum = { version = "0.7", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+http-body-util = "0.1"
+proptest = "1"
+futures = "0.3"

@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+*.swp
+.DS_Store
+
+# secrets — never commit
+.env
+.env.*
+!.env*.example
