@@ -291,7 +291,7 @@ impl RpcPoolConfig {
 /// the pool.
 ///
 /// Not every JSON-RPC method maps to a dedicated variant. The common methods
-/// Pistachio uses are enumerated; everything else falls into `Other`.
+/// are enumerated; everything else falls into `Other`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RpcCapability {
