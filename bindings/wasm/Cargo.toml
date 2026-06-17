@@ -12,7 +12,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Browser + Node WASM binding for drm3-rpc-pool: a resilient JSON-RPC failover pool driven by the platform `fetch`."
 license = "MIT"
-repository = "https://github.com/DRM3Labs-OSS/rpc-pool"
+repository = "https://github.com/DRM3Labs-OSS/drm3-rpc-pool"
 authors = ["DRM3 Labs Corp. <support@drm3.io>"]
 
 [lib]

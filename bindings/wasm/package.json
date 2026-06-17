@@ -9,7 +9,7 @@
   "types": "drm3_rpc_pool_wasm.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DRM3Labs-OSS/rpc-pool"
+    "url": "https://github.com/DRM3Labs-OSS/drm3-rpc-pool"
   },
   "keywords": ["evm", "rpc", "ethereum", "failover", "wasm", "browser", "drm3"],
   "files": [

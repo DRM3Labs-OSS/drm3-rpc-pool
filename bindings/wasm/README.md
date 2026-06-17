@@ -8,7 +8,7 @@ network call is done by the platform `fetch`, so the same package works in the
 **browser**, in **Web Workers**, and in **Node 18+**.
 
 It is a WASM binding over the Rust crate
-[`drm3-rpc-pool`](https://github.com/DRM3Labs-OSS/rpc-pool). No `reqwest`, no
+[`drm3-rpc-pool`](https://github.com/DRM3Labs-OSS/drm3-rpc-pool). No `reqwest`, no
 `tokio` - just `fetch`.
 
 ## Install
