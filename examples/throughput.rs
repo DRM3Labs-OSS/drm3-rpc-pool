@@ -1,47 +1,60 @@
-//! Throughput benchmark: with vs without the pool.
+//! Throughput benchmark: pool-size sweep (1 provider -> N providers).
 //!
-//! Fires N concurrent `eth_blockNumber` requests two ways and reports
-//! success-rate, throughput (req/s), and p50/p95 latency as a single JSON line:
+//! Fires N concurrent `eth_blockNumber` requests at a pool and reports
+//! success-rate, throughput (req/s), and p50/p95 latency as a single JSON line.
+//! Modes:
 //!
-//!   * `--mode single` — all load at ONE public endpoint (no pool, no failover).
-//!   * `--mode pool` — same load spread across the chain preset's pool, with
-//!     per-endpoint health, backoff, and automatic failover.
+//!   * `--mode single` — all load at ONE public endpoint (pool size 1, no
+//!     failover). The control case.
+//!   * `--mode pool`   — same load spread across the chain preset's full pool,
+//!     with per-endpoint health, backoff, and automatic failover.
+//!   * `--mode sweep`  — run pool size 1, 2, 3, … up to `--max-pool` (default:
+//!     all preset endpoints) and print ONE JSON line per pool size, each with a
+//!     `pool_size` field. This is the strong proof: success rate climbs as
+//!     providers are added.
 //!
-//! Public RPCs are IP-rate-limited, so the two modes are meant to run on
-//! separate machines / CI runners (separate IPs) to avoid sharing limits. See
+//! Public RPCs are IP-rate-limited, so distinct modes/pool-sizes are meant to
+//! run on separate machines / CI runners (separate IPs) to avoid sharing limits
+//! where the comparison must be apples-to-apples. See
 //! `.github/workflows/benchmark.yml`.
 //!
 //! Usage:
 //!   cargo run --release --example throughput -- \
-//!       --mode pool --chain base --requests 300 --concurrency 50
+//!       --mode sweep --chain base --requests 600 --concurrency 120
 //!
 //! Flags:
-//!   --mode single|pool   (default: pool)
-//!   --chain <preset>     (default: base; any preset name/alias)
-//!   --requests <N>       (default: 300)
-//!   --concurrency <N>    (default: 50)
-//!   --endpoint <url>     (single mode only: override the target endpoint)
+//!   --mode single|pool|sweep   (default: sweep)
+//!   --chain <preset>           (default: base; any preset name/alias)
+//!   --requests <N>             (default: 600)
+//!   --concurrency <N>          (default: 120)
+//!   --max-pool <N>             (sweep only: cap pool size; default: all)
+//!   --pool-size <N>            (run a single pool size of exactly N endpoints)
+//!   --endpoint <url>           (single mode only: override the target endpoint)
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use drm3_rpc_pool::{presets, RpcPool, RpcPoolConfig};
-use serde_json::json;
+use drm3_rpc_pool::{presets, RpcEndpoint, RpcPool, RpcPoolConfig};
+use serde_json::{json, Value};
 
 struct Args {
     mode: String,
     chain: String,
     requests: usize,
     concurrency: usize,
+    max_pool: Option<usize>,
+    pool_size: Option<usize>,
     endpoint: Option<String>,
 }
 
 fn parse_args() -> Args {
-    let mut mode = "pool".to_string();
+    let mut mode = "sweep".to_string();
     let mut chain = "base".to_string();
-    let mut requests = 300usize;
-    let mut concurrency = 50usize;
+    let mut requests = 600usize;
+    let mut concurrency = 120usize;
+    let mut max_pool: Option<usize> = None;
+    let mut pool_size: Option<usize> = None;
     let mut endpoint: Option<String> = None;
 
     let mut it = std::env::args().skip(1);
@@ -56,11 +69,13 @@ fn parse_args() -> Args {
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(concurrency)
             }
+            "--max-pool" => max_pool = it.next().and_then(|v| v.parse().ok()),
+            "--pool-size" => pool_size = it.next().and_then(|v| v.parse().ok()),
             "--endpoint" => endpoint = it.next(),
             "-h" | "--help" => {
                 eprintln!(
-                    "throughput --mode single|pool --chain <preset> \
-                     --requests N --concurrency N [--endpoint URL]"
+                    "throughput --mode single|pool|sweep --chain <preset> \
+                     --requests N --concurrency N [--max-pool N] [--pool-size N] [--endpoint URL]"
                 );
                 std::process::exit(0);
             }
@@ -76,6 +91,8 @@ fn parse_args() -> Args {
         chain,
         requests,
         concurrency,
+        max_pool,
+        pool_size,
         endpoint,
     }
 }
@@ -88,51 +105,25 @@ fn percentile(sorted_ms: &[u64], p: f64) -> u64 {
     sorted_ms[rank.min(sorted_ms.len() - 1)]
 }
 
-#[tokio::main]
-async fn main() {
-    let args = parse_args();
+fn preset_endpoints(chain: &str) -> Vec<RpcEndpoint> {
+    presets::endpoints_for(chain).unwrap_or_else(|| {
+        eprintln!("unknown chain preset: {chain}");
+        std::process::exit(2);
+    })
+}
 
-    // Build the pool for the requested mode.
-    let pool = match args.mode.as_str() {
-        "pool" => {
-            let config = presets::config_for(&args.chain).unwrap_or_else(|| {
-                eprintln!("unknown chain preset: {}", args.chain);
-                std::process::exit(2);
-            });
-            RpcPool::with_default_transport(config)
-        }
-        "single" => {
-            // One endpoint only: the override, else the preset's first endpoint.
-            let url = match &args.endpoint {
-                Some(u) => u.clone(),
-                None => {
-                    let eps = presets::endpoints_for(&args.chain).unwrap_or_else(|| {
-                        eprintln!("unknown chain preset: {}", args.chain);
-                        std::process::exit(2);
-                    });
-                    eps.into_iter()
-                        .next()
-                        .expect("preset has at least one endpoint")
-                        .url
-                }
-            };
-            RpcPool::with_default_transport(RpcPoolConfig::from_urls([url]))
-        }
-        other => {
-            eprintln!("unknown mode: {other} (expected single|pool)");
-            std::process::exit(2);
-        }
-    };
-
+/// Fire `requests` calls at `pool`, bounded to `concurrency` in flight, and
+/// return the measured report fields as a JSON object (without identity fields).
+async fn measure(pool: RpcPool, requests: usize, concurrency: usize) -> Value {
     let ok = Arc::new(AtomicU64::new(0));
     let err = Arc::new(AtomicU64::new(0));
-    let latencies: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::with_capacity(args.requests)));
+    let latencies: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::with_capacity(requests)));
 
-    let sem = Arc::new(tokio::sync::Semaphore::new(args.concurrency));
+    let sem = Arc::new(tokio::sync::Semaphore::new(concurrency));
     let start = Instant::now();
 
-    let mut handles = Vec::with_capacity(args.requests);
-    for _ in 0..args.requests {
+    let mut handles = Vec::with_capacity(requests);
+    for _ in 0..requests {
         let pool = pool.clone();
         let ok = ok.clone();
         let err = err.clone();
@@ -180,11 +171,7 @@ async fn main() {
         0.0
     };
 
-    let report = json!({
-        "mode": args.mode,
-        "chain": args.chain,
-        "requests": args.requests,
-        "concurrency": args.concurrency,
+    json!({
         "ok": ok,
         "err": err,
         "success_rate": (success_rate * 1000.0).round() / 1000.0,
@@ -192,7 +179,100 @@ async fn main() {
         "throughput_rps": (throughput_rps * 10.0).round() / 10.0,
         "p50_ms": percentile(&lat, 0.50),
         "p95_ms": percentile(&lat, 0.95),
-    });
+    })
+}
 
-    println!("{report}");
+/// Merge identity fields onto a measured report and print it as one JSON line.
+fn emit(mode: &str, chain: &str, requests: usize, concurrency: usize, pool_size: usize, m: Value) {
+    let mut out = json!({
+        "mode": mode,
+        "chain": chain,
+        "pool_size": pool_size,
+        "requests": requests,
+        "concurrency": concurrency,
+    });
+    if let (Value::Object(dst), Value::Object(src)) = (&mut out, m) {
+        dst.extend(src);
+    }
+    println!("{out}");
+}
+
+#[tokio::main]
+async fn main() {
+    let args = parse_args();
+
+    match args.mode.as_str() {
+        // Whole-preset pool, full failover. With `--pool-size N`, take exactly
+        // the first N preset endpoints (lets CI run one pool size per runner).
+        // pool_size = number of endpoints actually wired up.
+        "pool" => {
+            let mut eps = preset_endpoints(&args.chain);
+            if let Some(n) = args.pool_size {
+                eps.truncate(n.clamp(1, eps.len()));
+            }
+            let size = eps.len();
+            let pool = RpcPool::with_default_transport(RpcPoolConfig {
+                endpoints: eps,
+                ..RpcPoolConfig::default()
+            });
+            let m = measure(pool, args.requests, args.concurrency).await;
+            emit(
+                "pool",
+                &args.chain,
+                args.requests,
+                args.concurrency,
+                size,
+                m,
+            );
+        }
+
+        // One endpoint only (pool size 1): the override, else the preset's first.
+        "single" => {
+            let url = match &args.endpoint {
+                Some(u) => u.clone(),
+                None => {
+                    preset_endpoints(&args.chain)
+                        .into_iter()
+                        .next()
+                        .expect("preset has at least one endpoint")
+                        .url
+                }
+            };
+            let pool = RpcPool::with_default_transport(RpcPoolConfig::from_urls([url]));
+            let m = measure(pool, args.requests, args.concurrency).await;
+            emit("single", &args.chain, args.requests, args.concurrency, 1, m);
+        }
+
+        // Pool-size sweep: 1, 2, … up to max-pool (default: all preset endpoints).
+        // One JSON line per size, each with its own `pool_size`.
+        "sweep" => {
+            let eps = preset_endpoints(&args.chain);
+            let cap = args.max_pool.unwrap_or(eps.len()).clamp(1, eps.len());
+            // Cooldown between sizes so a prior burst's IP rate-limiting does
+            // not bleed into the next size on a shared-IP run (e.g. local). On
+            // separate CI runners each size has its own IP and this is moot.
+            let cooldown_s: u64 = std::env::var("SWEEP_COOLDOWN_S")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8);
+            for size in 1..=cap {
+                if size > 1 && cooldown_s > 0 {
+                    tokio::time::sleep(std::time::Duration::from_secs(cooldown_s)).await;
+                }
+                let subset: Vec<RpcEndpoint> = eps.iter().take(size).cloned().collect();
+                let mode = if size == 1 { "single" } else { "pool" };
+                let pool = RpcPool::with_default_transport(RpcPoolConfig {
+                    endpoints: subset,
+                    ..RpcPoolConfig::default()
+                });
+                let m = measure(pool, args.requests, args.concurrency).await;
+                emit(mode, &args.chain, args.requests, args.concurrency, size, m);
+            }
+        }
+
+        other => {
+            eprintln!("unknown mode: {other} (expected single|pool|sweep)");
+            std::process::exit(2);
+        }
+    }
 }

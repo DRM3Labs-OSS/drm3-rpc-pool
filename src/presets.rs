@@ -58,10 +58,10 @@ fn list(labeled: &[(&str, &str)]) -> Vec<RpcEndpoint> {
 pub fn base() -> Vec<RpcEndpoint> {
     list(&[
         ("base-official", "https://mainnet.base.org"),
-        ("base-llamarpc", "https://base.llamarpc.com"),
         ("base-publicnode", "https://base-rpc.publicnode.com"),
-        ("base-blockpi", "https://base.blockpi.network/v1/rpc/public"),
         ("base-1rpc", "https://1rpc.io/base"),
+        ("base-llamarpc", "https://base.llamarpc.com"),
+        ("base-blockpi", "https://base.blockpi.network/v1/rpc/public"),
     ])
 }
 
