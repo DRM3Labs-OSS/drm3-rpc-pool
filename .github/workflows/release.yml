@@ -130,7 +130,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: publish
-        run: cargo publish --locked --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "CARGO_REGISTRY_TOKEN not set - skipping crates.io publish. Binaries are still released; add the secret to enable crates.io."
+            exit 0
+          fi
+          cargo publish --locked --token "$TOKEN"
 
   # ── npm (wasm package) ──────────────────────────────────────────────
   npm:
@@ -158,7 +165,12 @@ jobs:
         run: node bindings/wasm/finalize-pkg.mjs
 
       - name: Publish to npm
-        run: npm publish --access public
         working-directory: bindings/wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN not set - skipping npm publish. Binaries are still released; add the secret to enable npm."
+            exit 0
+          fi
+          npm publish --access public
