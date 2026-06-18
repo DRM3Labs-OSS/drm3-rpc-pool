@@ -56,6 +56,9 @@ const now = new Date().toISOString().replace("T", " ").replace(/\..+/, " UTC");
 const header =
   `**${meta.requests} requests · concurrency ${meta.concurrency} · chain \`${meta.chain}\` · FREE public endpoints (no key)**`;
 
+const method =
+  `_Method: we fire **${meta.requests} requests** at **concurrency ${meta.concurrency}** (${meta.concurrency} calls in flight at once) against a pool of 1 provider, then 2, then 3, on up. \`Throughput (req/s)\` is **successful** \`eth_blockNumber\` calls per second sustained over the burst (ok-only: failed/rate-limited calls are excluded), not a count of requests. This is single-runner, real-network field data, not a controlled lab benchmark._`;
+
 const table =
   `| Providers | Mode | Success rate | Throughput (req/s) | p50 latency | p95 latency |\n` +
   `|----------:|------|-------------:|-------------------:|------------:|------------:|\n` +
@@ -69,9 +72,10 @@ const table =
 
 const block =
   `${header}\n\n` +
-  `![Success rate and throughput climb as providers are added](./assets/benchmark.svg)\n\n` +
+  `${method}\n\n` +
+  `![One provider buckles, a pool holds: success rate and throughput across pool sizes](./assets/benchmark.svg)\n\n` +
   table +
-  `\n_Auto-generated ${now}. Real-network field data against free public endpoints, not a lab benchmark; numbers vary with live public-RPC conditions. One provider gets rate-limited (HTTP 429) under burst; adding providers lets the pool fail over so success rate and throughput climb._\n\n` +
+  `\n_Auto-generated ${now}. Real-network field data against free public endpoints, not a lab benchmark; numbers vary with live public-RPC conditions. A single public endpoint gets rate-limited (HTTP 429) under this burst and collapses; with a pool, failover routes around the throttled endpoint so the burst is absorbed and sustained throughput climbs as load spreads across providers. At this load a pool of 2 already absorbs the burst, so the success-rate gain past 2 is small and noisy (public endpoints share one IP on a single runner, and their rate-limit windows overlap run to run); the climb to watch is throughput. Heavier bursts push the success-rate ceiling out to more providers._\n\n` +
   `_Run it yourself: \`cargo run --release --example throughput\` (see [Throughput benchmark](#throughput-benchmark))._\n`;
 
 // ── README rewrite ─────────────────────────────────────────────────────
@@ -119,7 +123,9 @@ const C = {
 const n = rows.length;
 const W = Math.max(720, 150 + n * 110);
 
-// Vertical bands (y positions), each with clear breathing room.
+// Vertical bands (y positions), each with clear breathing room. The bottom
+// text bands (caption + footnote) are laid out dynamically AFTER wrapping so
+// nothing ever clips the SVG edges; H is computed last from the real bottom.
 const TITLE_Y = 40;
 const PILL_TOP = 60;
 const PILL_H = 40;
@@ -128,8 +134,7 @@ const CHART_H = 230; // plot area height
 const CHART_BOTTOM = CHART_TOP + CHART_H; // baseline (0%)
 const XLABEL_Y = CHART_BOTTOM + 28; // "N provider(s)" row
 const XSUB_Y = XLABEL_Y + 18; // throughput sub-label row
-const FOOT_Y = XSUB_Y + 34;
-const H = FOOT_Y + 18;
+const CAPTION_Y = XSUB_Y + 30; // first methodology-caption baseline
 
 const PAD_L = 62;
 const PAD_R = 28;
@@ -170,7 +175,7 @@ rows.forEach((r, i) => {
     `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
     `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c0}"/></linearGradient>`;
 
-  // Value label (success %) above the bar — guaranteed clear of the bar top.
+  // Value label (success %) above the bar, guaranteed clear of the bar top.
   const labelY = top - 12;
   bars +=
     `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="7" fill="url(#${gid})"/>` +
@@ -222,19 +227,67 @@ let pill = "";
   });
 }
 
+// Wrap `text` to lines that fit inside the viewport (greedy by word), centered
+// at `cx`, starting at baseline `y0`. Returns the SVG and the next free y so
+// the next text band can stack right below without ever overlapping or
+// clipping. `pad` is the horizontal margin reserved on EACH side.
+function wrapCentered(text, cx, y0, { size, lineH, fill, weight, pad = 32 }) {
+  const maxChars = Math.max(8, Math.floor((W - 2 * pad) / (size * 0.55)));
+  const words = text.split(" ");
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length > maxChars && cur) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  const wt = weight ? ` font-weight="${weight}"` : "";
+  const svg = lines
+    .map(
+      (ln, i) =>
+        `<text x="${cx.toFixed(1)}" y="${(y0 + i * lineH).toFixed(1)}" fill="${fill}" font-family="${FONT}" font-size="${size}"${wt} text-anchor="middle">${esc(ln)}</text>`,
+    )
+    .join("\n  ");
+  return { svg, nextY: y0 + lines.length * lineH };
+}
+
+// Methodology caption: terse, honest statement of what was measured.
+const caption =
+  `We fire ${meta.requests} requests at concurrency ${meta.concurrency} (${meta.concurrency} in flight at once). req/s is successful calls per second sustained over the burst, not a request count. Single-runner, real-network field data.`;
+
+// Footnote: legend + honest "2 suffice at this load" note, plus the timestamp.
 const footnote =
-  `Success rate (bars) + throughput per provider count · auto-generated ${now} · real-network, varies with live conditions`;
+  `Bars = success rate, sub-labels = sustained req/s, per provider count. At this load a pool of 2 already absorbs the burst; heavier bursts need more providers. Auto-generated ${now}. Real-network, varies with live public-RPC conditions.`;
+
+const cap = wrapCentered(caption, W / 2, CAPTION_Y, {
+  size: 12.5,
+  lineH: 17,
+  fill: C.sub,
+  weight: "600",
+});
+const foot = wrapCentered(footnote, W / 2, cap.nextY + 16, {
+  size: 11,
+  lineH: 15,
+  fill: C.axis,
+});
+const H = foot.nextY + 6;
 
 const svg =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Success rate and throughput climb as providers are added to the pool">\n` +
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H.toFixed(0)}" viewBox="0 0 ${W} ${H.toFixed(0)}" role="img" aria-label="Success rate and throughput climb as providers are added to the pool">\n` +
   `  <defs>${defs}</defs>\n` +
-  `  <rect width="${W}" height="${H}" fill="${C.bg}"/>\n` +
-  `  <text x="${W / 2}" y="${TITLE_Y}" fill="${C.text}" font-family="${FONT}" font-size="22" font-weight="800" text-anchor="middle">Add a provider, the pool gets more resilient</text>\n` +
+  `  <rect width="${W}" height="${H.toFixed(0)}" fill="${C.bg}"/>\n` +
+  `  <text x="${W / 2}" y="${TITLE_Y}" fill="${C.text}" font-family="${FONT}" font-size="22" font-weight="800" text-anchor="middle">One provider buckles, a pool holds</text>\n` +
   `  ${pill}\n` +
   `  ${grid}\n` +
   `  ${bars}\n` +
   `  ${xlabels}\n` +
-  `  <text x="${W / 2}" y="${FOOT_Y}" fill="${C.axis}" font-family="${FONT}" font-size="11.5" text-anchor="middle">${esc(footnote)}</text>\n` +
+  `  ${cap.svg}\n` +
+  `  ${foot.svg}\n` +
   `</svg>\n`;
 
 writeFileSync(join(repoRoot, "assets", "benchmark.svg"), svg);
