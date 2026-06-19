@@ -9,12 +9,13 @@ where the honest line is.
 A single endpoint that rate-limits (429) or has a bad minute takes your call
 with it. A pool retries the next healthy endpoint on any 429, error, or timeout.
 
-In our own load tests against free public Base endpoints (500 requests at
-concurrency 120), a single endpoint completed only **30-50% of calls** during a
-burst. The moment a second healthy endpoint was in the pool, completion went to
-**~100%**. Exact numbers swing run to run because free endpoints are flaky, but
-the direction is steady: one endpoint drops calls under load, a pool of two or
-more completes them. This is the reason to use it.
+In our own load tests against free public Base endpoints (a burst of a few
+hundred requests at high concurrency), a single endpoint completed only
+**30-50% of calls**; the full pool completed **~90-100%** (one representative
+run: 37% on one endpoint, 91% across five). Exact numbers swing run to run
+because free endpoints are flaky, but the direction is steady and the gap is
+large: one endpoint drops calls under load, a pool keeps them. This is the
+reason to use it.
 
 ## More throughput from free tiers: no, not from free public RPCs
 
