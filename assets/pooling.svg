@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img" aria-label="One free endpoint throttles; a pool of peers scales sustained throughput with the pool size">
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56d364"/><stop offset="1" stop-color="#3fb950"/></linearGradient>
+    <linearGradient id="one" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7b72"/><stop offset="1" stop-color="#f85149"/></linearGradient>
+  </defs>
+  <rect width="640" height="300" fill="#0d1117"/>
+  <text x="320" y="38" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="800" text-anchor="middle">One endpoint throttles. A pool of peers scales.</text>
+  <text x="320" y="60" fill="#8b949e" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" text-anchor="middle">Give interchangeable endpoints equal priority and the pool spreads load across them.</text>
+
+  <!-- baseline -->
+  <line x1="70" y1="240" x2="592" y2="240" stroke="#30363d" stroke-width="1"/>
+
+  <!-- 1 endpoint (throttled) -->
+  <rect x="120" y="201" width="90" height="39" rx="6" fill="url(#one)"/>
+  <text x="165" y="191" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="15" font-weight="800" text-anchor="middle">1&#215;</text>
+  <text x="165" y="262" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="middle">1 endpoint</text>
+  <text x="165" y="279" fill="#8b949e" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="11" text-anchor="middle">rate-limited (429s)</text>
+
+  <!-- 2 peers -->
+  <rect x="300" y="162" width="90" height="78" rx="6" fill="url(#bar)"/>
+  <text x="345" y="152" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="15" font-weight="800" text-anchor="middle">~2&#215;</text>
+  <text x="345" y="262" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="middle">2 peers</text>
+  <text x="345" y="279" fill="#8b949e" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="11" text-anchor="middle">load spread + failover</text>
+
+  <!-- 4 peers -->
+  <rect x="480" y="84" width="90" height="156" rx="6" fill="url(#bar)"/>
+  <text x="525" y="74" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="15" font-weight="800" text-anchor="middle">~4&#215;</text>
+  <text x="525" y="262" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="middle">4 peers</text>
+  <text x="525" y="279" fill="#8b949e" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="11" text-anchor="middle">~sum of their limits</text>
+</svg>

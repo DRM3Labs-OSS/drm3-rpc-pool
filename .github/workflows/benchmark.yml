@@ -79,17 +79,17 @@ jobs:
               | tee -a results.jsonl
           done
 
-      - name: Generate chart + README block
+      - name: Generate chart + docs/benchmark.md block
         run: node .github/scripts/render-benchmark.mjs results.jsonl
 
       - name: Commit results back
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- README.md assets/benchmark.svg; then
+          if git diff --quiet -- docs/benchmark.md assets/benchmark.svg; then
             echo "no benchmark changes"
             exit 0
           fi
-          git add README.md assets/benchmark.svg
+          git add docs/benchmark.md assets/benchmark.svg
           git commit -m "bench: refresh controlled routing A/B (auto, deterministic)"
           git push

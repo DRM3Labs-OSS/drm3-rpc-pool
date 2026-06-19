@@ -105,28 +105,28 @@ const speedup =
 const block =
   `${header}\n\n` +
   `${method}\n\n` +
-  `![Strict failover bottlenecks on one endpoint; load-aware routing uses the whole pool](./assets/benchmark.svg)\n\n` +
+  `![Strict failover bottlenecks on one endpoint; load-aware routing uses the whole pool](../assets/benchmark.svg)\n\n` +
   table +
   `\n#### What this proves\n\n` +
   `- **Strict failover leaves capacity on the table.** \`chain\` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other ${n - 1} sit idle — throughput pins at the single-endpoint ceiling (~${oneCeil} req/s).\n` +
   `- **Load-aware routing uses the whole pool.** \`spread\` (least in-flight across equal-priority peers) and \`capped\` (ride a preferred primary up to \`max_in_flight\`, then spill) both put work on every endpoint${speedup ? `, ~${speedup}× the throughput of \`chain\`` : ""} — and \`capped\` also gives the best p50 because the primary's first cap-worth of requests never queue.\n` +
   `- **Pick by goal.** Homogeneous peers and want max throughput → \`spread\` (equal \`priority\`). Want a keyed/paid primary to carry load but not melt down under a burst → \`capped\` (lower \`priority\` + \`max_in_flight\`). Want strict ordering and accept the bottleneck → leave it \`chain\` (distinct priorities, no cap), the default.\n` +
   `- **Implementation:** dispatch orders candidates by \`(saturated, priority, in-flight, index)\` in \`src/pool/mod.rs\`; every endpoint tracks live in-flight load, and a soft \`max_in_flight\` cap marks an endpoint saturated so traffic spills to peers before piling on.\n\n` +
-  `_Auto-generated ${now}. Deterministic controlled benchmark; reproduce: \`cargo run --release --example throughput -- --mock --mock-endpoints ${n} --mock-capacity ${cap} --mock-latency-ms ${latMs} --route spread --runs ${meta.runs} --requests ${meta.requests} --concurrency ${meta.concurrency}\` (see [Throughput benchmark](#throughput-benchmark))._\n`;
+  `_Auto-generated ${now}. Deterministic controlled benchmark; reproduce with the command in [Reproduce](#reproduce) below._\n`;
 
-// ── README rewrite ─────────────────────────────────────────────────────
-const readmePath = join(repoRoot, "README.md");
-let readme = readFileSync(readmePath, "utf8");
+// ── docs/benchmark.md rewrite ──────────────────────────────────────────
+const docPath = join(repoRoot, "docs", "benchmark.md");
+let doc = readFileSync(docPath, "utf8");
 const START = "<!-- BENCHMARK:START -->";
 const END = "<!-- BENCHMARK:END -->";
-const startIdx = readme.indexOf(START);
-const endIdx = readme.indexOf(END);
+const startIdx = doc.indexOf(START);
+const endIdx = doc.indexOf(END);
 if (startIdx === -1 || endIdx === -1) {
-  console.error("README is missing the BENCHMARK markers");
+  console.error("docs/benchmark.md is missing the BENCHMARK markers");
   process.exit(1);
 }
-readme = readme.slice(0, startIdx + START.length) + "\n" + block + readme.slice(endIdx);
-writeFileSync(readmePath, readme);
+doc = doc.slice(0, startIdx + START.length) + "\n" + block + doc.slice(endIdx);
+writeFileSync(docPath, doc);
 
 // ── SVG bar chart ──────────────────────────────────────────────────────
 const esc = (s) =>

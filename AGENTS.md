@@ -5,15 +5,21 @@ immediately.
 
 ## What this is
 
-A config-driven, language-agnostic JSON-RPC failover **proxy** for any EVM chain,
-plus the Rust library underneath it. Two ways to use it:
+A JSON-RPC endpoint pool for any EVM chain: failover, per-endpoint health, and
+load spreading across providers. Primarily a **library**; a proxy is included
+for apps that aren't Rust or TS.
 
-1. **Proxy daemon (`drm3-rpc-pool`)** - an HTTP server. Point any app, in any
-   language, at its `listen` address as the RPC URL. Every request is dispatched
-   through the pool with first-success-wins failover.
-2. **Rust library (`drm3_rpc_pool`)** - embed `RpcPool` directly.
+1. **Rust library (`drm3_rpc_pool`)** - embed `RpcPool` directly. The main path.
+2. **TypeScript/WASM (`@drm3labs-oss/rpc-pool`)** - the same pool in the browser
+   and Node, over `fetch`. See `bindings/wasm`.
+3. **Proxy daemon (`drm3-rpc-pool`)** - an HTTP server for any other language;
+   point an app at its `listen` address as the RPC URL. The fallback, not the
+   main path.
 
-No chain-specific code: every capability is a generic `eth_*` method.
+Routing: candidates are ordered `(saturated, priority, in-flight, index)` -
+lower priority preferred, equal priority = peers (load spreads by least
+in-flight), `max_in_flight` cap spills a saturated endpoint to peers. No
+chain-specific code: every capability is a generic `eth_*` method.
 
 ## Build
 
