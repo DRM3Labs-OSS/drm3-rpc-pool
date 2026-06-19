@@ -1,6 +1,6 @@
 //! Pluggable HTTP transport for the RPC pool.
 //!
-//! The pool does not care how bytes move — it only needs something that, given
+//! The pool does not care how bytes move - it only needs something that, given
 //! a JSON-RPC request as bytes, produces a response body as bytes or an error.
 //! The built-in `ReqwestTransport` is feature-gated so environments that bring
 //! their own HTTP stack can disable it.

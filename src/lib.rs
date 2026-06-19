@@ -1,4 +1,4 @@
-//! drm3-rpc-pool — resilient JSON-RPC failover pool for any EVM chain.
+//! drm3-rpc-pool - resilient JSON-RPC failover pool for any EVM chain.
 //!
 //! Works with any EVM JSON-RPC endpoints (Ethereum, Base, Arbitrum, Optimism,
 //! Polygon, BNB, and so on). Every capability is a generic `eth_*` method;

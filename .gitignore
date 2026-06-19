@@ -8,7 +8,7 @@ bindings/wasm/pkg-node
 *.swp
 .DS_Store
 
-# secrets — never commit
+# secrets - never commit
 .env
 .env.*
 !.env*.example

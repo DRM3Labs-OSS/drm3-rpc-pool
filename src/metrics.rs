@@ -9,7 +9,7 @@ use crate::send_sync::MaybeSendSync;
 
 /// Hook fired by the pool at key lifecycle points.
 ///
-/// `endpoint_tag` is either the endpoint label (if configured) or the URL —
+/// `endpoint_tag` is either the endpoint label (if configured) or the URL -
 /// same as `RpcEndpoint::tag()`.
 ///
 /// `MaybeSendSync` is `Send + Sync` on native and a no-op on wasm, so a wasm

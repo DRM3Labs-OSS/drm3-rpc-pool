@@ -18,10 +18,10 @@
 //!
 //! Modes:
 //!
-//!   * `--mode single` — all load at ONE endpoint (pool size 1, no failover).
-//!   * `--mode pool`   — load against the first `--pool-size` preset endpoints
+//!   * `--mode single` - all load at ONE endpoint (pool size 1, no failover).
+//!   * `--mode pool`   - load against the first `--pool-size` preset endpoints
 //!     with health, backoff and automatic failover. The default benchmark.
-//!   * `--mode sweep`  — run pool size 1..max-pool, one JSON line per size.
+//!   * `--mode sweep`  - run pool size 1..max-pool, one JSON line per size.
 //!
 //! Public RPCs are IP-rate-limited, so distinct pool sizes are meant to run on
 //! separate machines / CI runners (separate IPs) to keep the comparison
@@ -464,9 +464,9 @@ fn emit(
 /// routing policies. `pass`: `pinned` keeps preset order every run, `shuffled`
 /// permutes per run from a run-derived seed (so the band reflects order
 /// sensitivity). `route`: `spread` makes every endpoint an equal-priority peer
-/// (priority 0 → the pool spreads concurrent load by least in-flight — the
+/// (priority 0 → the pool spreads concurrent load by least in-flight - the
 /// library default), `chain` assigns distinct priorities by position (strict
-/// priority-failover — the pre-optimization behavior, kept here so the chart
+/// priority-failover - the pre-optimization behavior, kept here so the chart
 /// can A/B the two).
 fn build_pass(
     eps: &[RpcEndpoint],
@@ -501,7 +501,7 @@ fn build_pass(
 // ── Controlled (in-process) transport ───────────────────────────────────
 // Models each endpoint as a server with a fixed per-request latency and a hard
 // concurrency limit: up to `capacity` requests are served at once, excess
-// requests QUEUE for a slot — they are not rejected. This is the honest way to
+// requests QUEUE for a slot - they are not rejected. This is the honest way to
 // isolate the routing mechanism from real-network noise: with a saturated but
 // healthy endpoint, strict-chain routing bottlenecks on the primary's slots
 // while the other endpoints sit idle (chain only fails over on an *error*, and

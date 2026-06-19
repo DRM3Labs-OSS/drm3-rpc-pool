@@ -77,9 +77,9 @@ const ROUTE_NOTE = {
 };
 
 // ── Markdown block ─────────────────────────────────────────────────────
-const header = `**Controlled benchmark — ${n} endpoints, each capacity ${cap} @ ${latMs}ms, ${meta.requests} requests @ concurrency ${meta.concurrency}, median of ${meta.runs} runs**`;
+const header = `**Controlled benchmark - ${n} endpoints, each capacity ${cap} @ ${latMs}ms, ${meta.requests} requests @ concurrency ${meta.concurrency}, median of ${meta.runs} runs**`;
 
-const method = `_Method: a deterministic, in-process A/B (no network) that isolates the routing strategy. Each synthetic endpoint serves ${cap} requests at once at a fixed ${latMs}ms; excess requests queue (a saturated-but-healthy endpoint, not an error). One endpoint tops out at **${oneCeil} req/s**; the whole ${n}-endpoint pool can do **${fullCeil} req/s**. The only variable is how the pool routes. This is a lab benchmark by design — it removes public-RPC noise so the mechanism is legible; field numbers against free public endpoints are far noisier and dominated by which endpoint is healthy in the moment._`;
+const method = `_Method: a deterministic, in-process A/B (no network) that isolates the routing strategy. Each synthetic endpoint serves ${cap} requests at once at a fixed ${latMs}ms; excess requests queue (a saturated-but-healthy endpoint, not an error). One endpoint tops out at **${oneCeil} req/s**; the whole ${n}-endpoint pool can do **${fullCeil} req/s**. The only variable is how the pool routes. This is a lab benchmark by design - it removes public-RPC noise so the mechanism is legible; field numbers against free public endpoints are far noisier and dominated by which endpoint is healthy in the moment._`;
 
 const table =
   `| Routing | Throughput (req/s) | p50 | p95 | Success | What happens |\n` +
@@ -89,7 +89,7 @@ const table =
       const band =
         lo(r, "throughput_rps") === hi(r, "throughput_rps")
           ? fmt(r.throughput_rps)
-          : `${fmt(r.throughput_rps)} (${fmt(lo(r, "throughput_rps"))}–${fmt(hi(r, "throughput_rps"))})`;
+          : `${fmt(r.throughput_rps)} (${fmt(lo(r, "throughput_rps"))}-${fmt(hi(r, "throughput_rps"))})`;
       return `| ${ROUTE_LABEL[r.route] ?? r.route} | ${band} | ${fmt(r.p50_ms)} ms | ${fmt(r.p95_ms)} ms | ${(r.success_rate * 100).toFixed(0)}% | ${ROUTE_NOTE[r.route] ?? ""} |`;
     })
     .join("\n") +
@@ -108,8 +108,8 @@ const block =
   `![Strict failover bottlenecks on one endpoint; load-aware routing uses the whole pool](../assets/benchmark.svg)\n\n` +
   table +
   `\n#### What this proves\n\n` +
-  `- **Strict failover leaves capacity on the table.** \`chain\` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other ${n - 1} sit idle — throughput pins at the single-endpoint ceiling (~${oneCeil} req/s).\n` +
-  `- **Load-aware routing uses the whole pool.** \`spread\` (least in-flight across equal-priority peers) and \`capped\` (ride a preferred primary up to \`max_in_flight\`, then spill) both put work on every endpoint${speedup ? `, ~${speedup}× the throughput of \`chain\`` : ""} — and \`capped\` also gives the best p50 because the primary's first cap-worth of requests never queue.\n` +
+  `- **Strict failover leaves capacity on the table.** \`chain\` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other ${n - 1} sit idle - throughput pins at the single-endpoint ceiling (~${oneCeil} req/s).\n` +
+  `- **Load-aware routing uses the whole pool.** \`spread\` (least in-flight across equal-priority peers) and \`capped\` (ride a preferred primary up to \`max_in_flight\`, then spill) both put work on every endpoint${speedup ? `, ~${speedup}× the throughput of \`chain\`` : ""} - and \`capped\` also gives the best p50 because the primary's first cap-worth of requests never queue.\n` +
   `- **Pick by goal.** Homogeneous peers and want max throughput → \`spread\` (equal \`priority\`). Want a keyed/paid primary to carry load but not melt down under a burst → \`capped\` (lower \`priority\` + \`max_in_flight\`). Want strict ordering and accept the bottleneck → leave it \`chain\` (distinct priorities, no cap), the default.\n` +
   `- **Implementation:** dispatch orders candidates by \`(saturated, priority, in-flight, index)\` in \`src/pool/mod.rs\`; every endpoint tracks live in-flight load, and a soft \`max_in_flight\` cap marks an endpoint saturated so traffic spills to peers before piling on.\n\n` +
   `_Auto-generated ${now}. Deterministic controlled benchmark; reproduce with the command in [Reproduce](#reproduce) below._\n`;
@@ -213,7 +213,7 @@ rows.forEach((r, i) => {
   bars +=
     `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${(CHART_BOTTOM - top).toFixed(1)}" rx="7" fill="url(#${gid})"/>`;
 
-  // Min–max whisker.
+  // Min-max whisker.
   const yLo = yFor(lo(r, "throughput_rps"));
   const yHi = yFor(hi(r, "throughput_rps"));
   if (yLo - yHi > 1.5) {
@@ -292,7 +292,7 @@ function wrapCentered(text, cx, y0, { size, lineH, fill, weight, pad = 32 }) {
   return { svg, nextY: y0 + lines.length * lineH };
 }
 
-const caption = `Deterministic in-process A/B: ${n} endpoints, each serving ${cap} at a time at ${latMs}ms; excess queues. Strict chain pins at the single-endpoint ceiling (${oneCeil} req/s) with the rest of the pool idle; load-aware routing uses the whole pool. Whiskers are min–max over ${meta.runs} runs (tight = deterministic). Lab benchmark; field results on free public RPCs are noisier. ${now}.`;
+const caption = `Deterministic in-process A/B: ${n} endpoints, each serving ${cap} at a time at ${latMs}ms; excess queues. Strict chain pins at the single-endpoint ceiling (${oneCeil} req/s) with the rest of the pool idle; load-aware routing uses the whole pool. Whiskers are min-max over ${meta.runs} runs (tight = deterministic). Lab benchmark; field results on free public RPCs are noisier. ${now}.`;
 const cap_ = wrapCentered(caption, W / 2, CAPTION_Y, {
   size: 12,
   lineH: 16,

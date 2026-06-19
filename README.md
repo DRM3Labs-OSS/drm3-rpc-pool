@@ -1,17 +1,20 @@
 # drm3-rpc-pool
 
 [![CI](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![WASM](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml)
+[![Benchmark](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/benchmark.yml/badge.svg)](./docs/benchmark.md)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+![Rust 2021](https://img.shields.io/badge/rust-2021-orange?logo=rust)
 
-> Pool many JSON-RPC endpoints behind one call: automatic failover, per-endpoint health, and load spreading across providers, on any EVM chain. Rust and TypeScript library — no sidecar needed.
+> Pool many JSON-RPC endpoints behind one call: automatic failover, per-endpoint health, and load spreading across providers, on any EVM chain. Rust and TypeScript library - no sidecar needed.
 
 ## Why it exists
 
 A single hardcoded RPC URL is one point of failure and one rate limit. Public providers 429 you, lag under load, and go down without warning; when yours does, your app does. `drm3-rpc-pool` puts a pool behind one `call`:
 
-- **Failover** — when an endpoint 429s, errors, or times out, the next healthy one serves the request. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
-- **Load spreading** — list endpoints as **peers** (equal `priority`) and concurrent calls go to the least-loaded one. Your usable throughput becomes roughly the *sum* of their rate limits, not the cap of one. Pool ~10 free public endpoints and your effective free-tier rate climbs by about an order of magnitude. ([how this is measured](./docs/benchmark.md))
-- **Any EVM chain** — every capability is a generic `eth_*` method. Built-in presets for Base, Ethereum, Arbitrum, Optimism, Polygon, and BNB.
+- **Failover** - when an endpoint 429s, errors, or times out, the next healthy one serves the request. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
+- **Load spreading** - list endpoints as **peers** (equal `priority`) and concurrent calls go to the least-loaded one. Your usable throughput becomes roughly the *sum* of their rate limits, not the cap of one. Pool ~10 free public endpoints and your effective free-tier rate climbs by about an order of magnitude. ([how this is measured](./docs/benchmark.md))
+- **Any EVM chain** - every capability is a generic `eth_*` method. Built-in presets for Base, Ethereum, Arbitrum, Optimism, Polygon, and BNB.
 
 Embed it as a **Rust** or **TypeScript** library. If your app is in neither, a language-agnostic [proxy](#proxy-for-any-other-language) is included.
 
@@ -46,7 +49,7 @@ Build a config from a preset (`presets::config_for("base")`), a ranked URL list 
 
 ## TypeScript (browser + Node)
 
-The WASM binding runs the pool — failover, health, backoff, capability routing, load spreading — in WebAssembly; the network call is the platform `fetch`. Works in the browser, Web Workers, and Node 18+.
+The WASM binding runs the pool - failover, health, backoff, capability routing, load spreading - in WebAssembly; the network call is the platform `fetch`. Works in the browser, Web Workers, and Node 18+.
 
 ```sh
 npm install @drm3labs-oss/rpc-pool
@@ -74,7 +77,7 @@ Full config shape and browser/Node specifics: [`bindings/wasm/README.md`](./bind
 
 ## Configure routing
 
-One choice decides how a burst is distributed. It is just `priority` (and an optional `max_in_flight` cap) per endpoint — same fields in Rust, TypeScript, and TOML.
+One choice decides how a burst is distributed. It is just `priority` (and an optional `max_in_flight` cap) per endpoint - same fields in Rust, TypeScript, and TOML.
 
 | Goal | Set | Behavior |
 |------|-----|----------|
@@ -82,7 +85,7 @@ One choice decides how a burst is distributed. It is just `priority` (and an opt
 | **Failover** (prefer one) | **distinct** `priority` | tries lowest first, falls over only on error |
 | **Primary + spill** (keyed provider) | keyed at low `priority` **+ `max_in_flight`**; peers above | rides the paid endpoint up to its cap, spills the overflow to free peers |
 
-Primary-plus-spill, the common production shape — a paid key carries normal load, a burst overflows onto free peers instead of melting the primary:
+Primary-plus-spill, the common production shape - a paid key carries normal load, a burst overflows onto free peers instead of melting the primary:
 
 ```rust
 let endpoints = vec![
@@ -107,15 +110,15 @@ sequenceDiagram
     Pool->>B: fail over to next healthy, capable endpoint
     B-->>Pool: 200 result
     Pool-->>App: result (first success wins)
-    Pool->>A: after 2 failures, demote into backoff; one success restores it
+    Pool->>A: after 2 failures, demote into backoff (one success restores it)
 ```
 
 - **Candidate order** is `(saturated, priority, in-flight, index)`. Lower `priority` is always preferred; within a priority tier the least-loaded endpoint wins (peers spread); an endpoint at its `max_in_flight` cap is *saturated* and sorts behind anything with headroom (it spills), but stays a last resort so requests are never dropped.
 - **First-success-wins** dispatch with a per-call retry budget (`max_retries`, `0` = try every candidate).
-- **Failure detection** — any non-2xx (429, 5xx), transport error, or unparseable body is a failure for that endpoint. A well-formed JSON-RPC error result is a valid answer, returned as-is.
-- **Health + backoff** — `demotion_threshold` (default 2) consecutive failures demote an endpoint into exponential cooldown (base 2s, doubled per failure, capped 300s). One success resets it.
-- **Capability routing** — tag an endpoint with the methods it serves; calls it can't serve skip it. Empty = serves everything.
-- **Per-endpoint controls** — client-side `max_rps` throttle (a throttled endpoint is skipped, not awaited) and `auth` (URL-baked key, header, or bearer; secrets via `${ENV_VAR}`).
+- **Failure detection** - any non-2xx (429, 5xx), transport error, or unparseable body is a failure for that endpoint. A well-formed JSON-RPC error result is a valid answer, returned as-is.
+- **Health + backoff** - `demotion_threshold` (default 2) consecutive failures demote an endpoint into exponential cooldown (base 2s, doubled per failure, capped 300s). One success resets it.
+- **Capability routing** - tag an endpoint with the methods it serves; calls it can't serve skip it. Empty = serves everything.
+- **Per-endpoint controls** - client-side `max_rps` throttle (a throttled endpoint is skipped, not awaited) and `auth` (URL-baked key, header, or bearer; secrets via `${ENV_VAR}`).
 
 ## Throughput under load
 
@@ -123,7 +126,7 @@ When a burst exceeds one endpoint's capacity, strict failover keeps hammering th
 
 ![One endpoint throttles; a pool of peers scales sustained throughput with the pool](./assets/pooling.svg)
 
-That mechanism is measured in a controlled, deterministic benchmark — and the honest caveats (why a model, and how noisy real free-RPC numbers are) are spelled out in **[docs/benchmark.md](./docs/benchmark.md)**.
+That mechanism is measured in a controlled, deterministic benchmark - and the honest caveats (why a model, and how noisy real free-RPC numbers are) are spelled out in **[docs/benchmark.md](./docs/benchmark.md)**.
 
 ## Config reference
 
@@ -134,7 +137,7 @@ Pool-level: `request_timeout_ms` (per-attempt timeout, default 15s), `max_retrie
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
 | `url` | string | required | HTTP(S) JSON-RPC URL. |
-| `label` | string | — | Tag for logs / `/metrics`; falls back to the URL. |
+| `label` | string | - | Tag for logs / `/metrics`; falls back to the URL. |
 | `priority` | integer | `0` | Lower tried first; **equal = peers** (load spreads); ties break by order. |
 | `max_in_flight` | integer | unset | Soft concurrency cap; at the cap the endpoint spills to peers. |
 | `max_rps` | integer | unset | Client-side rate throttle; a throttled endpoint is skipped, not awaited. |
@@ -142,7 +145,7 @@ Pool-level: `request_timeout_ms` (per-attempt timeout, default 15s), `max_retrie
 | `auth` | table | `{ type = "none" }` | `url_key`, `{ type="header", name, value }`, or `{ type="bearer", token }`. |
 
 ```toml
-# rpc-pool.toml — secrets stay in the environment via ${ENV_VAR}.
+# rpc-pool.toml - secrets stay in the environment via ${ENV_VAR}.
 request_timeout_ms = 8000
 
 [[endpoints]]                                  # keyed primary
@@ -160,11 +163,11 @@ url = "https://mainnet.base.org"
 priority = 1
 ```
 
-Presets (`base`, `ethereum`/`eth`, `arbitrum`/`arb`, `optimism`/`op`, `polygon`/`matic`, `bnb`/`bsc`) ship public, no-key endpoint lists as a starting point — override them with your own keyed providers. A full annotated config is in [`examples/rpc-pool.toml`](./examples/rpc-pool.toml).
+Presets (`base`, `ethereum`/`eth`, `arbitrum`/`arb`, `optimism`/`op`, `polygon`/`matic`, `bnb`/`bsc`) ship public, no-key endpoint lists as a starting point - override them with your own keyed providers. A full annotated config is in [`examples/rpc-pool.toml`](./examples/rpc-pool.toml).
 
 ## Proxy (for any other language)
 
-If your app isn't Rust or TypeScript, run the bundled proxy and point any JSON-RPC client at it — no code change. This is the fallback, not the main path.
+If your app isn't Rust or TypeScript, run the bundled proxy and point any JSON-RPC client at it - no code change. This is the fallback, not the main path.
 
 ```sh
 cargo install --path .                      # or download a release binary
@@ -175,9 +178,9 @@ drm3-rpc-pool --config rpc-pool.toml         # serves on 127.0.0.1:8545
 
 Point your tooling at it (`ethers`/`viem`/`web3.py`/`cast`/`hardhat`): set the RPC URL to `http://127.0.0.1:8545`. Single requests and batch arrays both work. Routes:
 
-- `POST /` — JSON-RPC entrypoint. Preserves the client `id`; relays upstream error envelopes and pool errors (`-32010` all upstreams failed, `-32011` no healthy endpoints).
-- `GET /health` — `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.
-- `GET /metrics` — per-endpoint status + live health, JSON.
+- `POST /` - JSON-RPC entrypoint. Preserves the client `id`; relays upstream error envelopes and pool errors (`-32010` all upstreams failed, `-32011` no healthy endpoints).
+- `GET /health` - `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.
+- `GET /metrics` - per-endpoint status + live health, JSON.
 
 Docker:
 
@@ -195,7 +198,7 @@ docker run --rm -p 8545:8545 -e ALCHEMY_KEY=... \
 - **Proxy from source:** `git clone … && cargo build --release` → `./target/release/drm3-rpc-pool`.
 - **Prebuilt binaries:** linux/macOS/Windows attached to each [GitHub Release](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/releases) (after the first `v*` tag), with `SHA256SUMS`.
 
-Cargo features: `reqwest-transport` (default; bundled HTTP client — disable to supply your own `Transport`), `daemon` (default; the proxy binary + HTTP server — disable for a pure library build).
+Cargo features: `reqwest-transport` (default; bundled HTTP client - disable to supply your own `Transport`), `daemon` (default; the proxy binary + HTTP server - disable for a pure library build).
 
 ## License
 

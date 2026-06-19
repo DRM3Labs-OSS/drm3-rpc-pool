@@ -1,16 +1,16 @@
 # Release workflow.
 #
 # Pushing a `vX.Y.Z` tag to the PUBLIC repository creates a full release:
-#   1. `binaries`     — cross-compiles the `drm3-rpc-pool` proxy binary for
+#   1. `binaries`     - cross-compiles the `drm3-rpc-pool` proxy binary for
 #                        linux (x64 + arm64), macos (x64 + arm64), and windows
 #                        (x64), then uploads each artifact plus SHA256SUMS to a
 #                        GitHub Release. Non-Rust users get prebuilt binaries
 #                        straight from the Releases page.
-#   2. `crates`       — `cargo publish` to crates.io. Needs the
+#   2. `crates`       - `cargo publish` to crates.io. Needs the
 #                        `CARGO_REGISTRY_TOKEN` repo secret (token from
 #                        https://crates.io/me). Claims the `drm3-rpc-pool` name
 #                        PERMANENTLY; a version can never be re-published.
-#   3. `npm`          — builds the wasm package and `npm publish`es the scoped
+#   3. `npm`          - builds the wasm package and `npm publish`es the scoped
 #                        `@drm3labs-oss/rpc-pool` package. Needs the `NPM_TOKEN`
 #                        repo secret with publish rights to the @drm3labs-oss
 #                        scope, and a PUBLIC repo (public scoped package).

@@ -13,26 +13,26 @@ queue (a saturated-but-healthy endpoint, *not* an error). The only variable
 across the three bars is the routing strategy.
 
 <!-- BENCHMARK:START -->
-**Controlled benchmark — 3 endpoints, each capacity 40 @ 50ms, 600 requests @ concurrency 200, median of 3 runs**
+**Controlled benchmark - 3 endpoints, each capacity 40 @ 50ms, 600 requests @ concurrency 200, median of 3 runs**
 
-_Method: a deterministic, in-process A/B (no network) that isolates the routing strategy. Each synthetic endpoint serves 40 requests at once at a fixed 50ms; excess requests queue (a saturated-but-healthy endpoint, not an error). One endpoint tops out at **800 req/s**; the whole 3-endpoint pool can do **2400 req/s**. The only variable is how the pool routes. This is a lab benchmark by design — it removes public-RPC noise so the mechanism is legible; field numbers against free public endpoints are far noisier and dominated by which endpoint is healthy in the moment._
+_Method: a deterministic, in-process A/B (no network) that isolates the routing strategy. Each synthetic endpoint serves 40 requests at once at a fixed 50ms; excess requests queue (a saturated-but-healthy endpoint, not an error). One endpoint tops out at **800 req/s**; the whole 3-endpoint pool can do **2400 req/s**. The only variable is how the pool routes. This is a lab benchmark by design - it removes public-RPC noise so the mechanism is legible; field numbers against free public endpoints are far noisier and dominated by which endpoint is healthy in the moment._
 
 ![Strict failover bottlenecks on one endpoint; load-aware routing uses the whole pool](../assets/benchmark.svg)
 
 | Routing | Throughput (req/s) | p50 | p95 | Success | What happens |
 |---------|-------------------:|----:|----:|--------:|--------------|
-| chain (strict failover) | 770.7 (770.4–774.7) | 259 ms | 260 ms | 100% | rides one endpoint; the rest of the pool is idle |
-| spread (least in-flight) | 1919.1 (1913–1924.6) | 103 ms | 104 ms | 100% | fills every peer evenly |
-| capped (cap=40) | 1650.1 (1648.2–1650.3) | 52 ms | 156 ms | 100% | rides the primary to its cap, then spills |
+| chain (strict failover) | 770.7 (770.4-774.7) | 259 ms | 260 ms | 100% | rides one endpoint; the rest of the pool is idle |
+| spread (least in-flight) | 1919.1 (1913-1924.6) | 103 ms | 104 ms | 100% | fills every peer evenly |
+| capped (cap=40) | 1650.1 (1648.2-1650.3) | 52 ms | 156 ms | 100% | rides the primary to its cap, then spills |
 
 #### What this proves
 
-- **Strict failover leaves capacity on the table.** `chain` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other 2 sit idle — throughput pins at the single-endpoint ceiling (~800 req/s).
-- **Load-aware routing uses the whole pool.** `spread` (least in-flight across equal-priority peers) and `capped` (ride a preferred primary up to `max_in_flight`, then spill) both put work on every endpoint, ~2.5× the throughput of `chain` — and `capped` also gives the best p50 because the primary's first cap-worth of requests never queue.
+- **Strict failover leaves capacity on the table.** `chain` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other 2 sit idle - throughput pins at the single-endpoint ceiling (~800 req/s).
+- **Load-aware routing uses the whole pool.** `spread` (least in-flight across equal-priority peers) and `capped` (ride a preferred primary up to `max_in_flight`, then spill) both put work on every endpoint, ~2.5× the throughput of `chain` - and `capped` also gives the best p50 because the primary's first cap-worth of requests never queue.
 - **Pick by goal.** Homogeneous peers and want max throughput → `spread` (equal `priority`). Want a keyed/paid primary to carry load but not melt down under a burst → `capped` (lower `priority` + `max_in_flight`). Want strict ordering and accept the bottleneck → leave it `chain` (distinct priorities, no cap), the default.
 - **Implementation:** dispatch orders candidates by `(saturated, priority, in-flight, index)` in `src/pool/mod.rs`; every endpoint tracks live in-flight load, and a soft `max_in_flight` cap marks an endpoint saturated so traffic spills to peers before piling on.
 
-_Auto-generated 2026-06-19 19:28:32 UTC. Deterministic controlled benchmark; reproduce with the command in [Reproduce](#reproduce) below._
+_Auto-generated 2026-06-19 19:53:23 UTC. Deterministic controlled benchmark; reproduce with the command in [Reproduce](#reproduce) below._
 <!-- BENCHMARK:END -->
 
 ## Why a model, not field numbers
@@ -50,8 +50,8 @@ numbers we measured against three free Base endpoints, 3-run medians:
 
 There is no winner in that table, only weather. That is exactly why the
 mechanism is shown in isolation instead: the model removes the weather so the
-routing decision is legible. What it shows is narrow and honest — strict
-failover leaves `N-1` endpoints idle; load-aware routing uses them — and nothing
+routing decision is legible. What it shows is narrow and honest - strict
+failover leaves `N-1` endpoints idle; load-aware routing uses them - and nothing
 about absolute req/s carries over to your providers.
 
 ## What the model assumes
@@ -60,14 +60,14 @@ about absolute req/s carries over to your providers.
   `--mock-latency-ms`; beyond that, requests queue. This models an endpoint that
   *slows down* under load rather than erroring.
 - A queued (slow) endpoint is not a failure, so `chain` routing never fails over
-  off it — which is the whole point: a saturated-but-healthy primary silently
+  off it - which is the whole point: a saturated-but-healthy primary silently
   bottlenecks a strict chain.
 - Real endpoints also reject (429) and vary in capacity and latency. The model
   deliberately omits that; it is a lower bound on the *mechanism*, not a forecast.
 
 ## Reproduce
 
-Controlled (deterministic — same numbers every run):
+Controlled (deterministic - same numbers every run):
 
 ```sh
 for route in chain spread capped; do
@@ -77,7 +77,7 @@ for route in chain spread capped; do
 done
 ```
 
-Field (real endpoints, honest but noisy — drop `--mock`):
+Field (real endpoints, honest but noisy - drop `--mock`):
 
 ```sh
 cargo run --release --example throughput -- \
@@ -85,7 +85,7 @@ cargo run --release --example throughput -- \
   --runs 5 --warmup --chain base --requests 600 --concurrency 150
 ```
 
-`--runs K` reports the median of K bursts with a min–max band; `--warmup`
+`--runs K` reports the median of K bursts with a min-max band; `--warmup`
 discards a priming burst; `--pass shuffled` varies endpoint order across runs so
 the band captures order sensitivity. The CI workflow
 ([`benchmark.yml`](../.github/workflows/benchmark.yml)) runs the controlled A/B

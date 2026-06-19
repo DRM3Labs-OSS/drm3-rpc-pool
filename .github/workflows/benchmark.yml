@@ -1,17 +1,17 @@
-# Throughput benchmark — controlled, deterministic routing A/B.
+# Throughput benchmark - controlled, deterministic routing A/B.
 #
 # Runs the `throughput` example in `--mock` mode: a fully in-process A/B of the
 # three routing strategies (chain / spread / capped) against synthetic
 # endpoints with a fixed latency and concurrency limit. There is no network, so
 # the result is deterministic and isolates the routing mechanism from
-# public-RPC noise. The job writes the result into the README "Results" section
-# plus a bar-chart SVG in assets/benchmark.svg, then commits both back as
+# public-RPC noise. The job writes the result into docs/benchmark.md plus a
+# bar-chart SVG in assets/benchmark.svg, then commits both back as
 # github-actions[bot].
 #
 # Why controlled instead of field data: real free public RPCs are dominated by
 # which endpoint happens to be healthy in the moment, so a field A/B of routing
 # strategies is swamped by noise (run to run it can say anything). The mock
-# isolates the one variable that matters here — how the pool routes a burst.
+# isolates the one variable that matters here - how the pool routes a burst.
 # The example can still be pointed at real endpoints (drop `--mock`) for honest,
 # noisy field numbers; that just is not what this chart claims.
 name: Benchmark
@@ -35,7 +35,7 @@ on:
         description: "Concurrent in-flight requests"
         default: "200"
       runs:
-        description: "Bursts per route — median + min/max band"
+        description: "Bursts per route - median + min/max band"
         default: "3"
   schedule:
     # Weekly, Monday 06:00 UTC.

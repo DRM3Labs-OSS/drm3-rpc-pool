@@ -4,7 +4,7 @@
 //! priority order. They are a starting point: pair them with your own keyed
 //! endpoints (Alchemy/Infura/etc.) at a lower `priority` so paid capacity is
 //! preferred and the public URLs act as failover. Nothing here is
-//! chain-specific beyond the URL list — `base()` is included but the crate is
+//! chain-specific beyond the URL list - `base()` is included but the crate is
 //! not Base-specific.
 //!
 //! Public endpoints come and go; treat these as defaults to be overridden by a
@@ -43,7 +43,7 @@ pub fn names() -> &'static [&'static str] {
 }
 
 /// Build a preset endpoint list in ranked failover order (`priority = index`).
-/// Public endpoints are heterogeneous — some are reliably faster than others —
+/// Public endpoints are heterogeneous - some are reliably faster than others -
 /// and live benchmarking shows that riding the best one as a primary and
 /// failing over beats blindly spreading load across all of them. Set two
 /// endpoints to the same `priority` if you want them treated as peers (the

@@ -25,7 +25,7 @@ struct ScriptedTransport {
     // Per-URL call counter. Used to determine whether this call succeeds or
     // fails, based on the caller-supplied script.
     calls: Mutex<std::collections::HashMap<String, usize>>,
-    // For each URL, a Vec<bool> — true = success, false = failure. If the
+    // For each URL, a Vec<bool> - true = success, false = failure. If the
     // counter exceeds the script length, default to success.
     script: Mutex<std::collections::HashMap<String, Vec<bool>>>,
     global_calls: AtomicUsize,

@@ -67,7 +67,7 @@ impl Drop for InFlightGuard<'_> {
     }
 }
 
-/// The RPC pool. Clone is cheap — all state is behind `Arc`.
+/// The RPC pool. Clone is cheap - all state is behind `Arc`.
 pub struct RpcPool {
     inner: Arc<PoolInner>,
 }
@@ -128,7 +128,7 @@ impl RpcPool {
         })
     }
 
-    /// Convenience — default metrics (no-op) and default backoff policy.
+    /// Convenience - default metrics (no-op) and default backoff policy.
     #[cfg(feature = "reqwest-transport")]
     pub fn with_default_transport(config: RpcPoolConfig) -> Self {
         Self::new(
@@ -203,14 +203,14 @@ impl RpcPool {
     /// `(saturated, priority asc, in-flight load asc, index asc)`. That
     /// ordering is the whole routing policy:
     ///
-    /// * a strictly lower `priority` is preferred — a keyed/paid endpoint
+    /// * a strictly lower `priority` is preferred - a keyed/paid endpoint
     ///   carries load and the public peers are failover;
     /// * **within** a tier the least-loaded endpoint wins, so concurrent calls
     ///   spread across equal-priority peers instead of stacking onto the first;
     /// * an endpoint at or over its `max_in_flight` soft cap is marked
     ///   *saturated* and sorts behind every non-saturated candidate, so a burst
     ///   that fills the primary spills to the next endpoint instead of piling
-    ///   on — but saturated endpoints stay in the list as a last resort, so a
+    ///   on - but saturated endpoints stay in the list as a last resort, so a
     ///   request is never dropped just because everything is busy.
     ///
     /// Also returns the incapable / in-cooldown skip counts for the

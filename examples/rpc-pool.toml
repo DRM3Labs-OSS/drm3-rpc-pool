@@ -1,4 +1,4 @@
-# drm3-rpc-pool — sample proxy config.
+# drm3-rpc-pool - sample proxy config.
 #
 # Run with:   drm3-rpc-pool --config examples/rpc-pool.toml
 # Generate a fresh one from a preset:   drm3-rpc-pool init base > rpc-pool.toml

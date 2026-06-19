@@ -83,7 +83,7 @@ pub fn expand_env(input: &str) -> Result<String, RpcError> {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RpcEndpoint {
     /// HTTP(S) URL for this endpoint. Env-var templating is the caller's
-    /// responsibility — the pool treats this as a literal URL.
+    /// responsibility - the pool treats this as a literal URL.
     pub url: String,
 
     /// Human-readable label (e.g. `"alchemy-mainnet"`, `"llamarpc"`).
@@ -150,14 +150,14 @@ impl RpcEndpoint {
         Ok(())
     }
 
-    /// Short tag for logs and metrics — label if set, else URL.
+    /// Short tag for logs and metrics - label if set, else URL.
     pub fn tag(&self) -> &str {
         self.label.as_deref().unwrap_or(&self.url)
     }
 
     /// Whether this endpoint can serve a given capability.
     ///
-    /// An empty capability list is treated as "supports everything" — this
+    /// An empty capability list is treated as "supports everything" - this
     /// matches operator intuition for minimally-configured endpoints.
     pub fn supports(&self, capability: &RpcCapability) -> bool {
         if self.capabilities.is_empty() {
@@ -175,7 +175,7 @@ fn default_listen() -> String {
 }
 
 /// Default per-request retry budget (number of endpoints to try beyond the
-/// first before giving up — `0` means "try every candidate", which is the
+/// first before giving up - `0` means "try every candidate", which is the
 /// pool's natural first-success-wins behaviour).
 const fn default_max_retries() -> u32 {
     0
@@ -218,7 +218,7 @@ impl RpcPoolConfig {
     /// Quick constructor from a list of plain URLs. Endpoints get
     /// `priority = index` (the list is a ranked failover order, first
     /// preferred), no label, no capability list. Give two or more endpoints
-    /// the *same* `priority` to make them peers — the pool then spreads
+    /// the *same* `priority` to make them peers - the pool then spreads
     /// concurrent load across that tier by least in-flight instead of always
     /// hitting the first.
     pub fn from_urls<I, S>(urls: I) -> Self
@@ -265,7 +265,7 @@ impl RpcPoolConfig {
     }
 
     /// Serialize back to a TOML string (secrets shown as their resolved values
-    /// if already expanded — prefer building from un-resolved sources for
+    /// if already expanded - prefer building from un-resolved sources for
     /// round-trips).
     pub fn to_toml_string(&self) -> Result<String, RpcError> {
         toml::to_string_pretty(self)

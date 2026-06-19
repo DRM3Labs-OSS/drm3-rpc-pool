@@ -1,4 +1,4 @@
-//! `drm3-rpc-pool` — config-driven, language-agnostic JSON-RPC failover proxy.
+//! `drm3-rpc-pool` - config-driven, language-agnostic JSON-RPC failover proxy.
 //!
 //! Point any app, in any language, at this daemon's `listen` address as its RPC
 //! URL. Every incoming JSON-RPC request is dispatched through the pool with
