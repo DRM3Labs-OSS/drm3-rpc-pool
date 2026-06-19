@@ -1,36 +1,42 @@
-# Throughput benchmark — auto-generated, real-network results.
+# Throughput benchmark — controlled, deterministic routing A/B.
 #
-# Runs the `throughput` example as a POOL-SIZE SWEEP and writes the result into
-# the README "Results" section plus a multi-bar SVG chart in
-# assets/benchmark.svg, then commits both back as github-actions[bot].
+# Runs the `throughput` example in `--mock` mode: a fully in-process A/B of the
+# three routing strategies (chain / spread / capped) against synthetic
+# endpoints with a fixed latency and concurrency limit. There is no network, so
+# the result is deterministic and isolates the routing mechanism from
+# public-RPC noise. The job writes the result into the README "Results" section
+# plus a bar-chart SVG in assets/benchmark.svg, then commits both back as
+# github-actions[bot].
 #
-# IMPORTANT: each pool size runs in its OWN job so it lands on its OWN runner
-# (its own egress IP). Public RPCs are IP-rate-limited, so running every size
-# from one IP would let them squash each other's limits and ruin the comparison.
-# Pool size N uses `--mode pool --pool-size N` (the first N preset endpoints);
-# size 1 is the single-endpoint control with no failover. The `publish` job
-# concatenates every size's JSON line into one sweep file and renders it.
-#
-# These are honest field numbers against FREE public endpoints (no key). They
-# vary with live public-RPC conditions and are timestamped. Adding a keyed
-# provider raises the ceiling well past these defaults.
+# Why controlled instead of field data: real free public RPCs are dominated by
+# which endpoint happens to be healthy in the moment, so a field A/B of routing
+# strategies is swamped by noise (run to run it can say anything). The mock
+# isolates the one variable that matters here — how the pool routes a burst.
+# The example can still be pointed at real endpoints (drop `--mock`) for honest,
+# noisy field numbers; that just is not what this chart claims.
 name: Benchmark
 
 on:
   workflow_dispatch:
     inputs:
-      chain:
-        description: "Chain preset to benchmark"
-        default: "base"
+      endpoints:
+        description: "Synthetic endpoints in the pool"
+        default: "3"
+      capacity:
+        description: "Per-endpoint concurrency (requests served at once)"
+        default: "40"
+      latency_ms:
+        description: "Per-request latency (ms)"
+        default: "50"
       requests:
-        description: "Total requests per pool size"
+        description: "Total requests per burst"
         default: "600"
       concurrency:
         description: "Concurrent in-flight requests"
-        default: "120"
-      max_pool:
-        description: "Largest pool size to sweep (number of endpoints)"
-        default: "5"
+        default: "200"
+      runs:
+        description: "Bursts per route — median + min/max band"
+        default: "3"
   schedule:
     # Weekly, Monday 06:00 UTC.
     - cron: "0 6 * * 1"
@@ -39,16 +45,9 @@ permissions:
   contents: write
 
 jobs:
-  run:
-    name: pool size ${{ matrix.size }} (own runner / own IP)
+  bench:
+    name: controlled routing A/B + chart
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # Sweep pool sizes 1..5 (base preset has 5 endpoints). Each size on its
-        # own runner so it gets its own IP and rate-limit budget. If you raise
-        # max_pool above a preset's endpoint count the example clamps to it.
-        size: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v6
 
@@ -56,41 +55,32 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Run throughput (pool size ${{ matrix.size }})
+      - name: Run controlled routing A/B (chain / spread / capped)
+        env:
+          ENDPOINTS: ${{ github.event.inputs.endpoints || '3' }}
+          CAPACITY: ${{ github.event.inputs.capacity || '40' }}
+          LATENCY: ${{ github.event.inputs.latency_ms || '50' }}
+          REQUESTS: ${{ github.event.inputs.requests || '600' }}
+          CONCURRENCY: ${{ github.event.inputs.concurrency || '200' }}
+          RUNS: ${{ github.event.inputs.runs || '3' }}
         run: |
-          cargo run --release --example throughput -- \
-            --mode pool \
-            --pool-size "${{ matrix.size }}" \
-            --chain "${{ github.event.inputs.chain || 'base' }}" \
-            --requests "${{ github.event.inputs.requests || '600' }}" \
-            --concurrency "${{ github.event.inputs.concurrency || '120' }}" \
-            | tee result-${{ matrix.size }}.json
-
-      - name: Upload result
-        uses: actions/upload-artifact@v4
-        with:
-          name: result-${{ matrix.size }}
-          path: result-${{ matrix.size }}.json
-
-  publish:
-    name: chart + README
-    needs: run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Download all sweep results
-        uses: actions/download-artifact@v4
-        with:
-          pattern: result-*
-          path: results
-          merge-multiple: true
-
-      - name: Concatenate into one sweep file
-        run: cat results/result-*.json > sweep.jsonl
+          : > results.jsonl
+          for route in chain spread capped; do
+            cargo run --release --example throughput -- \
+              --mock \
+              --mock-endpoints "$ENDPOINTS" \
+              --mock-capacity "$CAPACITY" \
+              --mock-latency-ms "$LATENCY" \
+              --route "$route" \
+              --cap "$CAPACITY" \
+              --runs "$RUNS" \
+              --requests "$REQUESTS" \
+              --concurrency "$CONCURRENCY" \
+              | tee -a results.jsonl
+          done
 
       - name: Generate chart + README block
-        run: node .github/scripts/render-benchmark.mjs sweep.jsonl
+        run: node .github/scripts/render-benchmark.mjs results.jsonl
 
       - name: Commit results back
         run: |
@@ -101,5 +91,5 @@ jobs:
             exit 0
           fi
           git add README.md assets/benchmark.svg
-          git commit -m "bench: refresh throughput sweep (auto, real-network)"
+          git commit -m "bench: refresh controlled routing A/B (auto, deterministic)"
           git push

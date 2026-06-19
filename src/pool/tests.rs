@@ -714,3 +714,178 @@ async fn forward_fails_over_on_transport_error() {
     }
     assert_eq!(transport.call_count(), 2);
 }
+
+// ── Load spreading ───────────────────────────────────────────
+
+/// Transport that parks every request at a barrier until `width` of them are
+/// in flight at once, then releases them all. This forces genuine concurrency
+/// so we can observe how the pool distributes simultaneous calls. It records
+/// the URL each request landed on.
+struct BarrierTransport {
+    barrier: tokio::sync::Barrier,
+    calls: Mutex<Vec<String>>,
+}
+
+impl BarrierTransport {
+    fn new(width: usize) -> Arc<Self> {
+        Arc::new(Self {
+            barrier: tokio::sync::Barrier::new(width),
+            calls: Mutex::new(Vec::new()),
+        })
+    }
+    fn counts(&self) -> std::collections::HashMap<String, usize> {
+        let mut m = std::collections::HashMap::new();
+        for u in self.calls.lock().unwrap().iter() {
+            *m.entry(u.clone()).or_insert(0) += 1;
+        }
+        m
+    }
+}
+
+#[async_trait]
+impl Transport for BarrierTransport {
+    async fn post_json(&self, url: &str, _body: Vec<u8>) -> Result<Vec<u8>, String> {
+        // Record the endpoint, then block until the whole batch has arrived so
+        // every request is genuinely in flight while the others are routed.
+        self.calls.lock().unwrap().push(url.into());
+        self.barrier.wait().await;
+        Ok(ok_body(json!("0x1")))
+    }
+}
+
+#[tokio::test]
+async fn equal_priority_peers_spread_concurrent_load() {
+    // Four equal-priority peers, four simultaneous calls: least-in-flight
+    // selection should send exactly one call to each, not pile all four onto
+    // the first endpoint the way a strict first-success walk would.
+    let transport = BarrierTransport::new(4);
+    let config = RpcPoolConfig {
+        endpoints: ["https://a", "https://b", "https://c", "https://d"]
+            .iter()
+            .map(|u| RpcEndpoint {
+                priority: 0, // same tier => peers
+                ..RpcEndpoint::new(*u)
+            })
+            .collect(),
+        ..RpcPoolConfig::default()
+    };
+    let pool = RpcPool::new(
+        config,
+        transport.clone(),
+        Arc::new(NoopMetrics),
+        BackoffPolicy::tight(),
+    )
+    .unwrap();
+
+    let mut joins = Vec::new();
+    for _ in 0..4 {
+        let pool = pool.clone();
+        joins.push(tokio::spawn(async move {
+            pool.call("eth_blockNumber", json!([])).await.unwrap();
+        }));
+    }
+    for j in joins {
+        j.await.unwrap();
+    }
+
+    let counts = transport.counts();
+    assert_eq!(counts.len(), 4, "load should spread across all four peers");
+    for (url, n) in &counts {
+        assert_eq!(*n, 1, "{url} should have served exactly one call, got {n}");
+    }
+}
+
+#[tokio::test]
+async fn lower_priority_carries_load_without_spilling_to_idle_peer() {
+    // A strictly lower-priority endpoint (a keyed/paid primary) must carry the
+    // whole burst; spreading is within a tier only, so an idle higher-number
+    // peer gets nothing until the primary actually fails.
+    let transport = BarrierTransport::new(3);
+    let config = RpcPoolConfig {
+        endpoints: vec![
+            RpcEndpoint {
+                priority: 0,
+                ..RpcEndpoint::new("https://primary")
+            },
+            RpcEndpoint {
+                priority: 1,
+                ..RpcEndpoint::new("https://standby")
+            },
+        ],
+        ..RpcPoolConfig::default()
+    };
+    let pool = RpcPool::new(
+        config,
+        transport.clone(),
+        Arc::new(NoopMetrics),
+        BackoffPolicy::tight(),
+    )
+    .unwrap();
+
+    let mut joins = Vec::new();
+    for _ in 0..3 {
+        let pool = pool.clone();
+        joins.push(tokio::spawn(async move {
+            pool.call("eth_blockNumber", json!([])).await.unwrap();
+        }));
+    }
+    for j in joins {
+        j.await.unwrap();
+    }
+
+    let counts = transport.counts();
+    assert_eq!(counts.get("https://primary"), Some(&3));
+    assert_eq!(counts.get("https://standby"), None);
+}
+
+#[tokio::test]
+async fn saturated_primary_spills_to_failover() {
+    // Primary has a soft in-flight cap of 2. Three simultaneous calls: the
+    // first two fill the primary, the third must spill to the standby instead
+    // of stacking a third request on the saturated primary.
+    let transport = BarrierTransport::new(3);
+    let config = RpcPoolConfig {
+        endpoints: vec![
+            RpcEndpoint {
+                priority: 0,
+                max_in_flight: Some(2),
+                ..RpcEndpoint::new("https://primary")
+            },
+            RpcEndpoint {
+                priority: 1,
+                ..RpcEndpoint::new("https://standby")
+            },
+        ],
+        ..RpcPoolConfig::default()
+    };
+    let pool = RpcPool::new(
+        config,
+        transport.clone(),
+        Arc::new(NoopMetrics),
+        BackoffPolicy::tight(),
+    )
+    .unwrap();
+
+    let mut joins = Vec::new();
+    for _ in 0..3 {
+        let pool = pool.clone();
+        joins.push(tokio::spawn(async move {
+            pool.call("eth_blockNumber", json!([])).await.unwrap();
+        }));
+    }
+    for j in joins {
+        j.await.unwrap();
+    }
+
+    let counts = transport.counts();
+    assert_eq!(
+        counts.get("https://primary"),
+        Some(&2),
+        "primary carries up to its cap"
+    );
+    assert_eq!(
+        counts.get("https://standby"),
+        Some(&1),
+        "the overflow request spills to the standby"
+    );
+}

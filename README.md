@@ -13,26 +13,31 @@ drm3-rpc-pool fixes this without touching your app code: give it an ordered list
 
 ## Results: with vs without
 
-The chart and table below come from a **real-network pool-size sweep**, rendered by the benchmark tool and refreshed by [`benchmark.yml`](./.github/workflows/benchmark.yml) (run it from the Actions tab, or it runs weekly). We fire the same concurrent burst at a pool of 1 provider (single endpoint, no failover), then 2, then 3, on up to all preset endpoints. One public endpoint gets rate-limited (HTTP 429) under the burst and collapses; the moment a second provider is in the pool, failover routes around the throttled endpoint, the burst is absorbed, and sustained throughput jumps. At this burst size a pool of 2 already soaks up the load, so the success-rate gain past 2 providers is small and noisy; the reliable signal is throughput climbing as load spreads. Numbers are timestamped and vary with live public-RPC conditions; this is honest field data, not a controlled lab benchmark. Public endpoints are IP-rate-limited, so where it matters each pool size runs on its own CI runner (its own IP), and heavier bursts push the success-rate ceiling out to more providers. Adding your own keyed provider raises the ceiling well past what these no-key public endpoints can do.
+The chart and table below come from a **controlled, deterministic benchmark**, rendered by the benchmark tool and refreshed by [`benchmark.yml`](./.github/workflows/benchmark.yml) (run it from the Actions tab, or it runs weekly). It answers one question: when a burst is bigger than any single endpoint can absorb, does the pool actually use the *rest* of its endpoints? To measure that without public-RPC noise drowning the signal, it runs entirely in-process against synthetic endpoints with a fixed latency and a fixed concurrency limit (excess requests queue — a saturated-but-healthy endpoint, not an error). The only variable across the bars is the **routing strategy**.
+
+The result: **strict failover leaves most of the pool idle.** Because `chain` routing only fails over on an *error*, a saturated-but-healthy primary just queues the whole burst while the other endpoints sit unused — throughput pins at the single-endpoint ceiling. Load-aware routing fixes this: `spread` (least in-flight across equal-priority peers) and `capped` (ride a preferred primary up to a `max_in_flight` cap, then spill to failover) put work on every endpoint and clear the burst at roughly the full-pool rate. This is a lab benchmark by design; real-network numbers against free public RPCs are far noisier and dominated by which endpoint happens to be healthy in the moment, which is exactly why the mechanism is shown here in isolation.
 
 <!-- BENCHMARK:START -->
-**1000 requests · concurrency 250 · chain `base` · FREE public endpoints (no key)**
+**Controlled benchmark — 3 endpoints, each capacity 40 @ 50ms, 600 requests @ concurrency 200, median of 3 runs**
 
-_Method: we fire **1000 requests** at **concurrency 250** (250 calls in flight at once) against a pool of 1 provider, then 2, then 3, on up. `Throughput (req/s)` is **successful** `eth_blockNumber` calls per second sustained over the burst (ok-only: failed/rate-limited calls are excluded), not a count of requests. This is single-runner, real-network field data, not a controlled lab benchmark._
+_Method: a deterministic, in-process A/B (no network) that isolates the routing strategy. Each synthetic endpoint serves 40 requests at once at a fixed 50ms; excess requests queue (a saturated-but-healthy endpoint, not an error). One endpoint tops out at **800 req/s**; the whole 3-endpoint pool can do **2400 req/s**. The only variable is how the pool routes. This is a lab benchmark by design — it removes public-RPC noise so the mechanism is legible; field numbers against free public endpoints are far noisier and dominated by which endpoint is healthy in the moment._
 
-![One provider buckles, a pool holds: success rate and throughput across pool sizes](./assets/benchmark.svg)
+![Strict failover bottlenecks on one endpoint; load-aware routing uses the whole pool](./assets/benchmark.svg)
 
-| Providers | Mode | Success rate | Throughput (req/s) | p50 latency | p95 latency |
-|----------:|------|-------------:|-------------------:|------------:|------------:|
-| 1 | single (no failover) | 15.9% | 224 | 225 ms | 487 ms |
-| 2 | pool (failover) | 100.0% | 1384.7 | 74 ms | 493 ms |
-| 3 | pool (failover) | 86.7% | 203.1 | 105 ms | 475 ms |
-| 4 | pool (failover) | 97.6% | 274.9 | 85 ms | 521 ms |
-| 5 | pool (failover) | 99.8% | 690.5 | 76 ms | 492 ms |
+| Routing | Throughput (req/s) | p50 | p95 | Success | What happens |
+|---------|-------------------:|----:|----:|--------:|--------------|
+| chain (strict failover) | 770.7 (770.4–774.7) | 259 ms | 260 ms | 100% | rides one endpoint; the rest of the pool is idle |
+| spread (least in-flight) | 1919.1 (1913–1924.6) | 103 ms | 104 ms | 100% | fills every peer evenly |
+| capped (cap=40) | 1650.1 (1648.2–1650.3) | 52 ms | 156 ms | 100% | rides the primary to its cap, then spills |
 
-_Auto-generated 2026-06-18 00:16:07 UTC. Real-network field data against free public endpoints, not a lab benchmark; numbers vary with live public-RPC conditions. A single public endpoint gets rate-limited (HTTP 429) under this burst and collapses; with a pool, failover routes around the throttled endpoint so the burst is absorbed and sustained throughput climbs as load spreads across providers. At this load a pool of 2 already absorbs the burst, so the success-rate gain past 2 is small and noisy (public endpoints share one IP on a single runner, and their rate-limit windows overlap run to run); the climb to watch is throughput. Heavier bursts push the success-rate ceiling out to more providers._
+#### What this proves
 
-_Run it yourself: `cargo run --release --example throughput` (see [Throughput benchmark](#throughput-benchmark))._
+- **Strict failover leaves capacity on the table.** `chain` sends every request to endpoint #1 first and only fails over on an *error*. A saturated-but-healthy endpoint never errors, so the burst queues on one endpoint while the other 2 sit idle — throughput pins at the single-endpoint ceiling (~800 req/s).
+- **Load-aware routing uses the whole pool.** `spread` (least in-flight across equal-priority peers) and `capped` (ride a preferred primary up to `max_in_flight`, then spill) both put work on every endpoint, ~2.5× the throughput of `chain` — and `capped` also gives the best p50 because the primary's first cap-worth of requests never queue.
+- **Pick by goal.** Homogeneous peers and want max throughput → `spread` (equal `priority`). Want a keyed/paid primary to carry load but not melt down under a burst → `capped` (lower `priority` + `max_in_flight`). Want strict ordering and accept the bottleneck → leave it `chain` (distinct priorities, no cap), the default.
+- **Implementation:** dispatch orders candidates by `(saturated, priority, in-flight, index)` in `src/pool/mod.rs`; every endpoint tracks live in-flight load, and a soft `max_in_flight` cap marks an endpoint saturated so traffic spills to peers before piling on.
+
+_Auto-generated 2026-06-19 02:52:58 UTC. Deterministic controlled benchmark; reproduce: `cargo run --release --example throughput -- --mock --mock-endpoints 3 --mock-capacity 40 --mock-latency-ms 50 --route spread --runs 3 --requests 600 --concurrency 200` (see [Throughput benchmark](#throughput-benchmark))._
 <!-- BENCHMARK:END -->
 
 ## How it works
@@ -56,6 +61,8 @@ sequenceDiagram
 
 - **Unbounded, priority-ordered pool.** Lower `priority` is tried first; ties break by config order.
 - **First-success-wins dispatch.** Try candidates in order, return the moment one succeeds.
+- **Load-aware routing.** Candidates are ordered by `(saturated, priority, in-flight, index)`. A strictly lower `priority` is always preferred, but endpoints sharing a priority are **peers**: the pool sends each call to the least-loaded one, so concurrent traffic spreads across a tier instead of stacking on the first. Set a peer's priority equal to share load; keep priorities distinct for strict failover.
+- **Soft concurrency cap (`max_in_flight`).** Optional per-endpoint ceiling. Once an endpoint hits it, it is marked *saturated* and new calls spill to a less-loaded peer (or the next tier) instead of piling on, falling back to it only if nothing else is free. This makes a ranked pool adaptive: a primary carries load up to its cap, then the burst spills to failover. See the [benchmark](#results-with-vs-without).
 - **Failure detection.** Any non-2xx response (429 rate-limit, 5xx, etc.) or transport error counts as a failure for that endpoint.
 - **Demotion + backoff.** After `demotion_threshold` (default 2) consecutive failures an endpoint is demoted into an exponentially growing cooldown (base 2s, doubling per failure, capped at 300s). One success resets it.
 - **Capability routing.** Tag an endpoint with the methods it supports and the pool skips it for calls it cannot serve. An empty list means "supports everything".
@@ -312,31 +319,28 @@ You can also build a config from URLs (`RpcPoolConfig::from_urls([...])`), from 
 
 ## Throughput benchmark
 
-The [`throughput` example](./examples/throughput.rs) reproduces the [Results](#results-with-vs-without) numbers. It fires N concurrent `eth_blockNumber` requests at a pool and reports success-rate, throughput (req/s), and p50/p95 latency as JSON. The default mode is a **pool-size sweep**:
+The [`throughput` example](./examples/throughput.rs) reproduces the [Results](#results-with-vs-without) numbers. It fires N concurrent `eth_blockNumber` requests at a pool and reports success-rate, throughput (req/s), and p50/p95 latency as JSON. `--runs K` reports the **median of K bursts with a min–max band** (and `--warmup` discards a priming burst first). `--route spread|chain|capped` selects the routing strategy under test: `chain` (distinct priorities, strict failover), `spread` (equal-priority peers, least in-flight), or `capped` (ranked order plus `--cap N` soft in-flight ceiling that spills when full).
+
+The headline chart is the **controlled** mode (`--mock`): a deterministic, in-process A/B with no network, so the routing mechanism is isolated from public-RPC noise. Each synthetic endpoint serves `--mock-capacity` requests at once at a fixed `--mock-latency-ms`; excess requests queue.
 
 ```sh
-# Sweep: pool size 1, 2, 3, ... up to all preset endpoints. One JSON line per size.
-cargo run --release --example throughput -- --mode sweep --chain base --requests 600 --concurrency 120
+# Controlled A/B: 3 endpoints, capacity 40 @ 50ms, 600 reqs @ concurrency 200.
+for route in chain spread capped; do
+  cargo run --release --example throughput -- \
+    --mock --mock-endpoints 3 --mock-capacity 40 --mock-latency-ms 50 \
+    --route "$route" --cap 40 --runs 3 --requests 600 --concurrency 200
+done
 ```
 
-Each pool size prints a single JSON line carrying its `pool_size`, e.g.:
+Each invocation prints a single JSON line, e.g.:
 
 ```json
-{"mode":"single","chain":"base","pool_size":1,"requests":600,"concurrency":120,"ok":150,"err":450,"success_rate":0.25,"elapsed_s":0.33,"throughput_rps":456.3,"p50_ms":190,"p95_ms":220}
-{"mode":"pool","chain":"base","pool_size":2,"requests":600,"concurrency":120,"ok":600,"err":0,"success_rate":1.0,"elapsed_s":1.3,"throughput_rps":463.0,"p50_ms":185,"p95_ms":657}
+{"mode":"controlled","route":"chain","cap":40,"mock_endpoints":3,"mock_capacity":40,"mock_latency_ms":50,"pool_size":3,"requests":600,"concurrency":200,"runs":3,"success_rate":1.0,"throughput_rps":770.7,"throughput_rps_lo":770.4,"throughput_rps_hi":774.7,"p50_ms":259,"p95_ms":260}
 ```
 
-You can also run a single point:
+It can also run against **real** endpoints (drop `--mock`): `--mode pool --pool-size N --chain <preset>` fires at the first N preset endpoints, and `--pass pinned|shuffled` (with `--seed`) varies endpoint order across runs so the band captures order sensitivity. Real-network runs are honest field data but noisy — dominated by which public endpoint is healthy at the moment — which is why the published chart uses controlled mode.
 
-```sh
-# One endpoint only (no pool, no failover):
-cargo run --release --example throughput -- --mode single --chain base --requests 600 --concurrency 120
-
-# Exactly the first N preset endpoints (lets each pool size run on its own runner):
-cargo run --release --example throughput -- --mode pool --chain base --pool-size 3 --requests 600 --concurrency 120
-```
-
-Flags: `--mode single|pool|sweep`, `--chain <preset>`, `--requests <N>`, `--concurrency <N>`, `--max-pool <N>` (sweep cap), `--pool-size <N>` (pool mode: use exactly N endpoints), `--endpoint <url>` (override the single-mode target). It uses **free public endpoints** - no key required. Public RPCs are IP-rate-limited, so a local back-to-back sweep inserts an inter-size cooldown (`SWEEP_COOLDOWN_S`, default 8s) and CI runs each pool size on its own runner (its own IP); that's why [`benchmark.yml`](./.github/workflows/benchmark.yml) splits the sizes into a matrix of separate jobs. Supplying your own keyed provider in a config raises the ceiling well past these public defaults.
+Flags: `--mock` (+ `--mock-endpoints N`, `--mock-capacity C`, `--mock-latency-ms L`), `--route spread|chain|capped`, `--cap <N>`, `--mode single|pool|sweep`, `--pass pinned|shuffled`, `--runs <K>`, `--warmup`, `--seed <N>`, `--chain <preset>`, `--requests <N>`, `--concurrency <N>`, `--max-pool <N>`, `--pool-size <N>`, `--endpoint <url>`. Real public RPCs are IP-rate-limited, so back-to-back runs insert a cooldown (`SWEEP_COOLDOWN_S`, default 8s). [`benchmark.yml`](./.github/workflows/benchmark.yml) runs the controlled A/B and renders the chart.
 
 ## License
 

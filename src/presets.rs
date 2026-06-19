@@ -42,6 +42,13 @@ pub fn names() -> &'static [&'static str] {
     &["base", "ethereum", "arbitrum", "optimism", "polygon", "bnb"]
 }
 
+/// Build a preset endpoint list in ranked failover order (`priority = index`).
+/// Public endpoints are heterogeneous — some are reliably faster than others —
+/// and live benchmarking shows that riding the best one as a primary and
+/// failing over beats blindly spreading load across all of them. Set two
+/// endpoints to the same `priority` if you want them treated as peers (the
+/// pool then spreads load across that tier by least in-flight), and add your
+/// own keyed provider at a lower `priority` to prefer it.
 fn list(labeled: &[(&str, &str)]) -> Vec<RpcEndpoint> {
     labeled
         .iter()

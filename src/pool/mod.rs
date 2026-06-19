@@ -43,6 +43,28 @@ struct PoolEntry {
     auth_headers: Vec<(String, String)>,
     /// `None` when the endpoint has no `max_rps`.
     rate_limiter: Option<RateLimiter>,
+    /// Requests currently in flight at this endpoint. Drives least-loaded
+    /// selection so concurrent calls spread across equal-priority peers
+    /// instead of all piling onto the first one.
+    in_flight: AtomicU64,
+}
+
+/// Increments an endpoint's in-flight counter on construction and decrements it
+/// on drop, so the count stays accurate even if the dispatch future is
+/// cancelled mid-await.
+struct InFlightGuard<'a>(&'a AtomicU64);
+
+impl<'a> InFlightGuard<'a> {
+    fn enter(counter: &'a AtomicU64) -> Self {
+        counter.fetch_add(1, Ordering::Relaxed);
+        Self(counter)
+    }
+}
+
+impl Drop for InFlightGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 /// The RPC pool. Clone is cheap — all state is behind `Arc`.
@@ -90,6 +112,7 @@ impl RpcPool {
                     health: Arc::new(EndpointHealth::new(backoff.clone())),
                     auth_headers,
                     rate_limiter,
+                    in_flight: AtomicU64::new(0),
                 }
             })
             .collect();
@@ -172,28 +195,38 @@ impl RpcPool {
         self.inner.entries.get(index).map(|e| e.health.clone())
     }
 
-    /// Dispatch a JSON-RPC call. Tries endpoints in priority order; first
-    /// success wins.
+    /// Candidate selection shared by [`call`](Self::call) and
+    /// [`forward`](Self::forward).
     ///
-    /// `params` must serialize to a JSON array per the JSON-RPC spec. Passing
-    /// `json!(null)` or `json!({})` is allowed if the method expects it.
-    pub async fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
-        let capability = RpcCapability::for_method(method);
-        let now = Instant::now();
-
-        // Candidate selection. Walk in priority order (entries is already
-        // sorted) and skip endpoints that are incapable or in cooldown.
-        let mut attempts: Vec<(String, String)> = Vec::new();
-        let mut considered = 0usize;
+    /// Returns the endpoint indices that are capable of the requested method
+    /// and currently available (not in cooldown), ordered by
+    /// `(saturated, priority asc, in-flight load asc, index asc)`. That
+    /// ordering is the whole routing policy:
+    ///
+    /// * a strictly lower `priority` is preferred — a keyed/paid endpoint
+    ///   carries load and the public peers are failover;
+    /// * **within** a tier the least-loaded endpoint wins, so concurrent calls
+    ///   spread across equal-priority peers instead of stacking onto the first;
+    /// * an endpoint at or over its `max_in_flight` soft cap is marked
+    ///   *saturated* and sorts behind every non-saturated candidate, so a burst
+    ///   that fills the primary spills to the next endpoint instead of piling
+    ///   on — but saturated endpoints stay in the list as a last resort, so a
+    ///   request is never dropped just because everything is busy.
+    ///
+    /// Also returns the incapable / in-cooldown skip counts for the
+    /// `NoCandidates` diagnostic.
+    fn ordered_candidates(
+        &self,
+        capability: &RpcCapability,
+        now: Instant,
+        method: &str,
+    ) -> (Vec<usize>, usize, usize) {
         let mut incapable = 0usize;
         let mut in_cooldown = 0usize;
-        let mut rate_limited = 0usize;
-        let mut tried = 0u32;
-
-        for entry in &self.inner.entries {
-            considered += 1;
+        let mut candidates: Vec<usize> = Vec::with_capacity(self.inner.entries.len());
+        for (i, entry) in self.inner.entries.iter().enumerate() {
             let tag = entry.endpoint.tag();
-            if !entry.endpoint.supports(&capability) {
+            if !entry.endpoint.supports(capability) {
                 self.inner.metrics.on_skipped_incapable(tag, method);
                 incapable += 1;
                 continue;
@@ -203,6 +236,42 @@ impl RpcPool {
                 in_cooldown += 1;
                 continue;
             }
+            candidates.push(i);
+        }
+        candidates.sort_by_key(|&i| {
+            let e = &self.inner.entries[i];
+            let load = e.in_flight.load(Ordering::Relaxed);
+            // Saturated = at/over the soft cap. Saturated candidates sort last
+            // (true > false) so traffic spills to anything with headroom first.
+            let saturated = e
+                .endpoint
+                .max_in_flight
+                .is_some_and(|cap| load >= cap as u64);
+            (saturated, e.endpoint.priority, load, i)
+        });
+        (candidates, incapable, in_cooldown)
+    }
+
+    /// Dispatch a JSON-RPC call. Prefers lower-priority endpoints, spreads
+    /// across equal-priority peers by least in-flight load, and fails over on
+    /// the first error; first success wins.
+    ///
+    /// `params` must serialize to a JSON array per the JSON-RPC spec. Passing
+    /// `json!(null)` or `json!({})` is allowed if the method expects it.
+    pub async fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+        let capability = RpcCapability::for_method(method);
+        let now = Instant::now();
+
+        let (candidates, incapable, in_cooldown) =
+            self.ordered_candidates(&capability, now, method);
+        let considered = candidates.len();
+        let mut attempts: Vec<(String, String)> = Vec::new();
+        let mut rate_limited = 0usize;
+        let mut tried = 0u32;
+
+        for idx in candidates {
+            let entry = &self.inner.entries[idx];
+            let tag = entry.endpoint.tag();
             // Per-endpoint client-side throttle. A locally-throttled endpoint is
             // skipped (not awaited) so the call fails over instead of stalling.
             if let Some(rl) = &entry.rate_limiter {
@@ -231,6 +300,10 @@ impl RpcPool {
             })?;
 
             let start = Instant::now();
+            // Count this request against the endpoint's load for the whole
+            // duration of the await, so concurrent callers see it and route
+            // around it. The guard decrements on every exit path.
+            let _load = InFlightGuard::enter(&entry.in_flight);
             match self
                 .inner
                 .transport
@@ -312,26 +385,16 @@ impl RpcPool {
         let capability = RpcCapability::for_method(method);
         let now = Instant::now();
 
+        let (candidates, incapable, in_cooldown) =
+            self.ordered_candidates(&capability, now, method);
+        let considered = candidates.len();
         let mut attempts: Vec<(String, String)> = Vec::new();
-        let mut considered = 0usize;
-        let mut incapable = 0usize;
-        let mut in_cooldown = 0usize;
         let mut rate_limited = 0usize;
         let mut tried = 0u32;
 
-        for entry in &self.inner.entries {
-            considered += 1;
+        for idx in candidates {
+            let entry = &self.inner.entries[idx];
             let tag = entry.endpoint.tag();
-            if !entry.endpoint.supports(&capability) {
-                self.inner.metrics.on_skipped_incapable(tag, method);
-                incapable += 1;
-                continue;
-            }
-            if !entry.health.is_available_at(now) {
-                self.inner.metrics.on_skipped_cooldown(tag, method);
-                in_cooldown += 1;
-                continue;
-            }
             if let Some(rl) = &entry.rate_limiter {
                 if !rl.try_acquire() {
                     rate_limited += 1;
@@ -357,6 +420,7 @@ impl RpcPool {
             })?;
 
             let start = Instant::now();
+            let _load = InFlightGuard::enter(&entry.in_flight);
             match self
                 .inner
                 .transport

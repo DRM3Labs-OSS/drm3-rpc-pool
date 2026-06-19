@@ -105,6 +105,15 @@ pub struct RpcEndpoint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_rps: Option<u32>,
 
+    /// Soft concurrency cap: once this many requests are in flight at this
+    /// endpoint, new calls prefer a less-loaded peer (or the next priority
+    /// tier) instead of piling on, and only fall back here if nothing else is
+    /// available. `None` = uncapped. This is what turns a ranked pool adaptive:
+    /// a primary carries load up to its cap, then the burst spills to failover
+    /// endpoints rather than saturating the primary and stalling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_in_flight: Option<u32>,
+
     /// Per-endpoint authentication. Defaults to `Auth::None`.
     #[serde(default, skip_serializing_if = "is_default_auth")]
     pub auth: Auth,
@@ -123,6 +132,7 @@ impl RpcEndpoint {
             priority: 0,
             capabilities: Vec::new(),
             max_rps: None,
+            max_in_flight: None,
             auth: Auth::None,
         }
     }
@@ -205,8 +215,12 @@ impl Default for RpcPoolConfig {
 }
 
 impl RpcPoolConfig {
-    /// Quick constructor from a list of plain URLs. All endpoints get
-    /// `priority = index`, no label, no capability list.
+    /// Quick constructor from a list of plain URLs. Endpoints get
+    /// `priority = index` (the list is a ranked failover order, first
+    /// preferred), no label, no capability list. Give two or more endpoints
+    /// the *same* `priority` to make them peers — the pool then spreads
+    /// concurrent load across that tier by least in-flight instead of always
+    /// hitting the first.
     pub fn from_urls<I, S>(urls: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -221,6 +235,7 @@ impl RpcPoolConfig {
                 priority: i as u32,
                 capabilities: Vec::new(),
                 max_rps: None,
+                max_in_flight: None,
                 auth: Auth::None,
             })
             .collect();
