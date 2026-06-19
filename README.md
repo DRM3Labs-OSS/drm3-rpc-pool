@@ -180,14 +180,7 @@ Point your tooling at it (`ethers`/`viem`/`web3.py`/`cast`/`hardhat`): set the R
 - `GET /health` - `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.
 - `GET /metrics` - per-endpoint status + live health, JSON.
 
-Docker. The container must bind `0.0.0.0` so `-p` can publish it (the default `127.0.0.1` only accepts connections from *inside* the container, which would refuse everything), so set `listen = "0.0.0.0:8545"` in the mounted config:
-
-```sh
-docker run --rm -p 8545:8545 -e ALCHEMY_KEY=... \
-  -v "$PWD/rpc-pool.toml:/etc/drm3/rpc-pool.toml:ro" drm3-rpc-pool   # config has listen = "0.0.0.0:8545"
-```
-
-> **`0.0.0.0` exposes an unauthenticated relay.** The proxy has no auth of its own, so anything that reaches the published port can spend your keyed providers. The native binary defaults to `127.0.0.1` (localhost-only, safe); the Docker path requires `0.0.0.0` by design, so firewall the published port or put your own auth in front of it.
+> **Binding `0.0.0.0` exposes an unauthenticated relay.** The proxy has no auth of its own, so anything that reaches the listen address can spend your keyed providers. The default `listen = "127.0.0.1:8545"` is localhost-only and safe; only set `0.0.0.0` behind a firewall or your own auth.
 
 ## Install
 

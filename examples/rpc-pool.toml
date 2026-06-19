@@ -6,7 +6,8 @@
 # Secrets NEVER live in this file. Use ${ENV_VAR} templating; the referenced
 # variable must be set in the environment or the proxy refuses to start.
 
-# Address the proxy binds to. Use 0.0.0.0 inside Docker so it is reachable.
+# Address the proxy binds to. 127.0.0.1 is localhost-only; only use 0.0.0.0
+# behind a firewall or your own auth (the proxy has no auth of its own).
 listen = "127.0.0.1:8545"
 
 # Per-request timeout (ms) applied to each upstream attempt.

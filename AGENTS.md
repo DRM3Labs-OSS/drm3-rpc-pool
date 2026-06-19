@@ -52,20 +52,6 @@ CLI surface (clap):
 
 Logging: `tracing` via `RUST_LOG`/`EnvFilter`, default `drm3_rpc_pool=info,info`.
 
-### Run - Docker
-
-```sh
-docker build -t drm3-rpc-pool .
-docker run --rm -p 8545:8545 \
-  -e ALCHEMY_KEY=... \
-  -v "$PWD/rpc-pool.toml:/etc/drm3/rpc-pool.toml:ro" \
-  drm3-rpc-pool
-```
-
-Default command is `--config /etc/drm3/rpc-pool.toml`. Use
-`listen = "0.0.0.0:8545"` in the config so it is reachable from outside the
-container. Multi-stage build, runs as non-root uid 10001, rustls (CA certs only).
-
 ## HTTP endpoints (proxy)
 
 - `POST /` - JSON-RPC. Single object or batch array. Preserves the client `id`.
