@@ -24,6 +24,22 @@ pub fn config_for(name: &str) -> Option<RpcPoolConfig> {
     })
 }
 
+/// Recommended starting config: the preset's public endpoints as equal-priority
+/// **peers**, so the pool spreads concurrent load across them (least in-flight)
+/// and fails over between them. This is the "pool free endpoints to extend your
+/// free tier" setup. Add your own keyed provider at a lower `priority` (with an
+/// optional `max_in_flight` cap) to prefer it and spill bursts onto these.
+pub fn peers_for(name: &str) -> Option<RpcPoolConfig> {
+    let mut endpoints = endpoints_for(name)?;
+    for ep in &mut endpoints {
+        ep.priority = 0;
+    }
+    Some(RpcPoolConfig {
+        endpoints,
+        ..RpcPoolConfig::default()
+    })
+}
+
 /// Endpoint list for a preset name (see [`config_for`] for accepted aliases).
 pub fn endpoints_for(name: &str) -> Option<Vec<RpcEndpoint>> {
     match name.trim().to_ascii_lowercase().as_str() {
@@ -141,6 +157,16 @@ mod tests {
             cfg.validate()
                 .unwrap_or_else(|e| panic!("preset {name} invalid: {e}"));
         }
+    }
+
+    #[test]
+    fn peers_for_makes_equal_priority_peers() {
+        let cfg = peers_for("base").expect("base peers");
+        assert!(cfg.endpoints.len() >= 2);
+        assert!(
+            cfg.endpoints.iter().all(|e| e.priority == 0),
+            "every peer should share priority 0 so load spreads"
+        );
     }
 
     #[test]

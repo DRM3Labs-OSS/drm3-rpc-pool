@@ -26,26 +26,22 @@ drm3-rpc-pool = { git = "https://github.com/DRM3Labs-OSS/drm3-rpc-pool" }
 ```
 
 ```rust
-use drm3_rpc_pool::{RpcEndpoint, RpcPool, RpcPoolConfig};
+use drm3_rpc_pool::{presets, RpcPool};
 use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Equal priority => peers: each call goes to the least-loaded endpoint,
-    // so load spreads across all three (and fails over if one dies).
-    let endpoints = ["https://base.llamarpc.com", "https://base-rpc.publicnode.com", "https://mainnet.base.org"]
-        .into_iter()
-        .map(|url| RpcEndpoint { priority: 0, ..RpcEndpoint::new(url) })
-        .collect();
+    // Recommended default: the chain's public endpoints as equal-priority peers,
+    // so load spreads across them and fails over. No keys, no config file.
+    let pool = RpcPool::with_default_transport(presets::peers_for("base").unwrap());
 
-    let pool = RpcPool::with_default_transport(RpcPoolConfig { endpoints, ..Default::default() });
     let block = pool.call("eth_blockNumber", json!([])).await?;
     println!("block = {block}");
     Ok(())
 }
 ```
 
-Build a config from a preset (`presets::config_for("base")`), a ranked URL list (`RpcPoolConfig::from_urls([..])`, distinct priorities = strict failover), or a TOML file (`RpcPoolConfig::from_toml_file(path)`). Bring your own HTTP client via the `Transport` trait and observability via `Metrics`. Default build bundles a `reqwest` transport; `default-features = false` drops it for a pure-library build.
+Other ways to build a config: `presets::config_for("base")` (the same endpoints as a ranked failover chain), `RpcPoolConfig::from_urls([..])` (a ranked URL list), or `RpcPoolConfig::from_toml_file(path)`. Bring your own HTTP client via the `Transport` trait and observability via `Metrics`. The default build bundles a `reqwest` transport; `default-features = false` drops it for a pure-library build.
 
 ## TypeScript (browser + Node)
 
@@ -76,6 +72,8 @@ console.log(pool.status()); // live per-endpoint health
 Full config shape and browser/Node specifics: [`bindings/wasm/README.md`](./bindings/wasm/README.md).
 
 ## Configure routing
+
+**Recommended default:** pool the free public endpoints as **peers** - `presets::peers_for("base")` in Rust, or set every endpoint to `priority: 0` in TS/TOML. Load spreads across them and any one can fail over. Add a keyed provider only when you need more than the free tier (the "primary + spill" row below).
 
 One choice decides how a burst is distributed. It is just `priority` (and an optional `max_in_flight` cap) per endpoint - same fields in Rust, TypeScript, and TOML.
 
@@ -182,14 +180,14 @@ Point your tooling at it (`ethers`/`viem`/`web3.py`/`cast`/`hardhat`): set the R
 - `GET /health` - `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.
 - `GET /metrics` - per-endpoint status + live health, JSON.
 
-Docker:
+Docker. The container must bind `0.0.0.0` so `-p` can publish it (the default `127.0.0.1` only accepts connections from *inside* the container, which would refuse everything), so set `listen = "0.0.0.0:8545"` in the mounted config:
 
 ```sh
 docker run --rm -p 8545:8545 -e ALCHEMY_KEY=... \
-  -v "$PWD/rpc-pool.toml:/etc/drm3/rpc-pool.toml:ro" drm3-rpc-pool
+  -v "$PWD/rpc-pool.toml:/etc/drm3/rpc-pool.toml:ro" drm3-rpc-pool   # config has listen = "0.0.0.0:8545"
 ```
 
-> **Binding `0.0.0.0` exposes an unauthenticated relay.** The proxy has no auth of its own, so anything that reaches the listen address can spend your keyed providers. Only bind `0.0.0.0` behind a firewall or your own auth. The default `127.0.0.1` is safe.
+> **`0.0.0.0` exposes an unauthenticated relay.** The proxy has no auth of its own, so anything that reaches the published port can spend your keyed providers. The native binary defaults to `127.0.0.1` (localhost-only, safe); the Docker path requires `0.0.0.0` by design, so firewall the published port or put your own auth in front of it.
 
 ## Install
 
