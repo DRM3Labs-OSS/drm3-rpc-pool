@@ -7,6 +7,8 @@
 
 > Put a pool of JSON-RPC endpoints behind one call so a single provider's 429s, lag, or outage doesn't become yours. Automatic failover and load-aware routing, on any EVM chain. Rust and TypeScript library, no sidecar needed.
 
+![One free endpoint completed 37% of calls under load; a pool of five completed 91%](./assets/reliability.svg)
+
 ## Why it exists
 
 A single hardcoded RPC URL is one point of failure. Public providers 429 you, lag under load, and go down without warning; when yours does, your app does. `drm3-rpc-pool` puts a pool behind one `call` and retries the next healthy endpoint on any 429, error, or timeout. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
@@ -178,12 +180,11 @@ If your app isn't Rust or TypeScript, run the bundled proxy and point any JSON-R
 
 ```sh
 cargo install --path .                      # or download a release binary
-drm3-rpc-pool init base > rpc-pool.toml     # scaffold from a preset, then edit
-export ALCHEMY_KEY=...                       # whatever the config references
+drm3-rpc-pool init base > rpc-pool.toml     # recommended free public Base list; runs as-is, no key
 drm3-rpc-pool --config rpc-pool.toml         # serves on 127.0.0.1:8545
 ```
 
-Point your tooling at it (`ethers`/`viem`/`web3.py`/`cast`/`hardhat`): set the RPC URL to `http://127.0.0.1:8545`. Single requests and batch arrays both work. Routes:
+`init` writes a ready-to-run list of the chain's free public endpoints as peers (no key needed); to add your own keyed providers, drop them in at `priority = 0` with `${ENV_VAR}` secrets - the scaffold's comments show the exact shape. Point your tooling at it (`ethers`/`viem`/`web3.py`/`cast`/`hardhat`): set the RPC URL to `http://127.0.0.1:8545`. Single requests and batch arrays both work. Routes:
 
 - `POST /` - JSON-RPC entrypoint. Preserves the client `id`; relays upstream error envelopes and pool errors (`-32010` all upstreams failed, `-32011` no healthy endpoints).
 - `GET /health` - `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.

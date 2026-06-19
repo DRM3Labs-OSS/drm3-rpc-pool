@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" role="img" aria-label="One free endpoint completed 37 percent of calls under load; a pool of five completed 91 percent">
+  <defs>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7b72"/><stop offset="1" stop-color="#f85149"/></linearGradient>
+    <linearGradient id="grn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56d364"/><stop offset="1" stop-color="#3fb950"/></linearGradient>
+  </defs>
+  <rect width="880" height="300" fill="#0d1117"/>
+  <rect x="0.5" y="0.5" width="879" height="299" rx="14" fill="none" stroke="#21262d"/>
+
+  <text x="440" y="48" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="22" font-weight="800" text-anchor="middle">Calls completed under load</text>
+  <text x="440" y="72" fill="#8b949e" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" text-anchor="middle">400 requests at concurrency 80, free public Base endpoints, median of 4 runs</text>
+
+  <!-- left: single endpoint -->
+  <rect x="90" y="108" width="260" height="120" rx="14" fill="#161b22" stroke="#30363d"/>
+  <text x="220" y="186" fill="url(#red)" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="64" font-weight="800" text-anchor="middle">37%</text>
+  <text x="220" y="135" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="middle">1 endpoint</text>
+  <text x="220" y="212" fill="#8b949e" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="12.5" text-anchor="middle">rate-limited, dropped the rest</text>
+
+  <!-- arrow -->
+  <text x="440" y="180" fill="#58a6ff" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="40" font-weight="800" text-anchor="middle">&#8594;</text>
+  <text x="440" y="208" fill="#6e7681" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="12" text-anchor="middle">pool it</text>
+
+  <!-- right: pool -->
+  <rect x="530" y="108" width="260" height="120" rx="14" fill="#161b22" stroke="#2ea043"/>
+  <text x="660" y="186" fill="url(#grn)" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="64" font-weight="800" text-anchor="middle">91%</text>
+  <text x="660" y="135" fill="#e6edf3" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="middle">pool of 5</text>
+  <text x="660" y="212" fill="#8b949e" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="12.5" text-anchor="middle">failover keeps your calls</text>
+
+  <text x="440" y="270" fill="#6e7681" font-family="ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="12.5" text-anchor="middle">Exact numbers vary with live conditions. The gap does not.</text>
+</svg>

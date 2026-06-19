@@ -59,23 +59,33 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Emit a starter config for `chain` to stdout.
 fn init(chain: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let cfg = presets::config_for(chain).ok_or_else(|| {
+    let mut cfg = presets::peers_for(chain).ok_or_else(|| {
         format!(
             "unknown chain {chain:?}. known presets: {}",
             presets::names().join(", ")
         )
     })?;
+    // Public endpoints are peers at priority 1; leave priority 0 free for a
+    // preferred keyed provider the user may add.
+    for ep in &mut cfg.endpoints {
+        ep.priority = 1;
+    }
     let body = cfg.to_toml_string()?;
     let header = format!(
         "# drm3-rpc-pool starter config for `{chain}`.\n\
-         # Add your own keyed endpoints at a lower `priority` so paid capacity\n\
-         # is preferred and the public URLs below act as failover. Secrets go\n\
-         # in the environment via ${{ENV_VAR}} templating, e.g.:\n\
+         # The endpoints below are free public RPCs at equal `priority` (peers):\n\
+         # the pool spreads load across them and fails over between them. Runs\n\
+         # as-is, no key required.\n\
+         #\n\
+         # To prefer your own keyed provider, add it at `priority = 0` (above the\n\
+         # peers) with an optional `max_in_flight` cap, so bursts spill onto the\n\
+         # free peers instead of your bill. Keep secrets in the environment via\n\
+         # ${{ENV_VAR}} templating:\n\
          #\n\
          #   [[endpoints]]\n\
-         #   url = \"https://eth-mainnet.g.alchemy.com/v2/${{ALCHEMY_KEY}}\"\n\
-         #   label = \"alchemy\"\n\
+         #   url = \"https://{chain}-mainnet.g.alchemy.com/v2/${{ALCHEMY_KEY}}\"\n\
          #   priority = 0\n\
+         #   max_in_flight = 50\n\
          #   auth = {{ type = \"url_key\" }}\n\
          #\n"
     );
