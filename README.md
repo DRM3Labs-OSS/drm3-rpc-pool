@@ -2,21 +2,22 @@
 
 [![CI](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml)
 [![WASM](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml)
-[![Benchmark](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/benchmark.yml/badge.svg)](./docs/benchmark.md)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 ![Rust 2021](https://img.shields.io/badge/rust-2021-orange?logo=rust)
 
-> Pool many JSON-RPC endpoints behind one call: automatic failover, per-endpoint health, and load spreading across providers, on any EVM chain. Rust and TypeScript library - no sidecar needed.
+> Put a pool of JSON-RPC endpoints behind one call so a single provider's 429s, lag, or outage doesn't become yours. Automatic failover and load-aware routing, on any EVM chain. Rust and TypeScript library, no sidecar needed.
 
 ## Why it exists
 
-A single hardcoded RPC URL is one point of failure and one rate limit. Public providers 429 you, lag under load, and go down without warning; when yours does, your app does. `drm3-rpc-pool` puts a pool behind one `call`:
+A single hardcoded RPC URL is one point of failure. Public providers 429 you, lag under load, and go down without warning; when yours does, your app does. `drm3-rpc-pool` puts a pool behind one `call` and retries the next healthy endpoint on any 429, error, or timeout. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
 
-- **Failover** - when an endpoint 429s, errors, or times out, the next healthy one serves the request. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
-- **Load spreading** - list endpoints as **peers** (equal `priority`) and concurrent calls go to the least-loaded one. Your usable throughput becomes roughly the *sum* of their rate limits, not the cap of one. Pool ~10 free public endpoints and your effective free-tier rate climbs by about an order of magnitude. ([how this is measured](./docs/benchmark.md))
-- **Any EVM chain** - every capability is a generic `eth_*` method. Built-in presets for Base, Ethereum, Arbitrum, Optimism, Polygon, and BNB.
+**What you get over a single URL** (measured, with the honest line drawn - [details](./docs/measurements.md)):
 
-Embed it as a **Rust** or **TypeScript** library. If your app is in neither, a language-agnostic [proxy](#proxy-for-any-other-language) is included.
+- **Reliability - yes, and immediately.** In our load tests a single free public endpoint completed only 30-50% of calls under a burst; a pool of two or more healthy endpoints completed ~all of them. This is the reason to use it.
+- **More throughput from free tiers - no.** Free public RPCs rate-limit per IP and some are flaky, so pooling them does *not* multiply throughput (we measured it). You get a real multiplier only from endpoints with independent capacity - your own keyed providers on separate accounts - where pooling them as peers gives roughly the sum of their limits.
+- **Lower cost on heavy workloads - yes.** Cap your paid provider with `max_in_flight` and put free endpoints behind it: bursts spill onto the free tier instead of your metered bill (or invert it to stay free-first).
+
+Works on any EVM chain (every capability is a generic `eth_*` method; presets for Base, Ethereum, Arbitrum, Optimism, Polygon, BNB). Embed it as a **Rust** or **TypeScript** library; if your app is in neither, a language-agnostic [proxy](#proxy-for-any-other-language) is included.
 
 ## Rust
 
@@ -118,13 +119,21 @@ sequenceDiagram
 - **Capability routing** - tag an endpoint with the methods it serves; calls it can't serve skip it. Empty = serves everything.
 - **Per-endpoint controls** - client-side `max_rps` throttle (a throttled endpoint is skipped, not awaited) and `auth` (URL-baked key, header, or bearer; secrets via `${ENV_VAR}`).
 
-## Throughput under load
+## Gotchas
 
-When a burst exceeds one endpoint's capacity, strict failover keeps hammering the first endpoint and leaves the rest of the pool idle. Peers spread the load, so sustained throughput scales with the pool.
+- **The proxy has no auth.** Anything that can reach its listen address can spend your keyed providers. The default `127.0.0.1` bind is safe; only use `0.0.0.0` behind a firewall or your own auth.
+- **Free public endpoints are failover, not a throughput farm.** They rate-limit per IP and some are flaky. Pooling them buys reliability, not raw req/s; don't expect throughput to scale with pool size on free endpoints ([why](./docs/measurements.md)).
+- **Spreading sends traffic to every peer, including a bad one,** until health-backoff demotes it (2 failures). If a set of endpoints is known to be uneven in quality, ranked failover (distinct `priority`) can be steadier than peers.
+- **`request_timeout_ms` is advisory in the WASM build** - it relies on the platform `fetch` default rather than an abort deadline.
+- **The pool can't authenticate *you* to a provider.** Keyed access still needs the key, set per endpoint via `auth` and `${ENV_VAR}`.
 
-![One endpoint throttles; a pool of peers scales sustained throughput with the pool](./assets/pooling.svg)
+## Best practices
 
-That mechanism is measured in a controlled, deterministic benchmark - and the honest caveats (why a model, and how noisy real free-RPC numbers are) are spelled out in **[docs/benchmark.md](./docs/benchmark.md)**.
+- **Free tier, no key:** `presets::peers_for("base")` (Rust) or `priority: 0` on every endpoint - failover plus load spreading across interchangeable peers.
+- **You have a paid key:** put it first (`priority: 0`) with a `max_in_flight` cap and free endpoints behind it. Normal traffic runs on the key; bursts spill to free instead of your bill.
+- **You want max throughput:** pool endpoints with *independent* capacity (keyed providers on separate accounts) as peers - that is the only setup where throughput aggregates.
+- **Always add your own providers.** Presets are a starting point of public endpoints that come and go; a keyed provider is your floor.
+- **Measure your own pool** before trusting numbers: `cargo run --release --example throughput -- --mode sweep --route spread --runs 3 --warmup`.
 
 ## Config reference
 
