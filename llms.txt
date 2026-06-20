@@ -1,0 +1,16 @@
+# drm3-rpc-pool
+
+> A JSON-RPC endpoint pool for any EVM chain: automatic failover, per-endpoint health, and load-aware routing. Rust and TypeScript library, with an optional language-agnostic proxy.
+
+What it gets you over a single RPC URL: reliability (one endpoint dropping calls under load does not take your app down). Throughput aggregates only across endpoints with independent capacity (your own keyed providers), not free public RPCs. Cost: cap a paid provider and spill bursts to free peers.
+
+## Docs
+- [README.md](./README.md): what it is, Rust and TypeScript quickstarts, routing config, how it works, gotchas, best practices
+- [AGENTS.md](./AGENTS.md): operational guide (build, run the proxy, conventions)
+- [docs/measurements.md](./docs/measurements.md): what pooling measurably gets you (reliability, throughput, cost)
+- [bindings/wasm/README.md](./bindings/wasm/README.md): the TypeScript/WASM package
+
+## Use
+- Rust: `RpcPool::with_default_transport(presets::peers_for("base").unwrap())`
+- TypeScript: `new RpcPool({ endpoints: [{ url, priority: 0 }, ...] })`
+- Routing config: equal `priority` makes peers (load spreads, least in-flight wins); distinct `priority` is strict failover; a `max_in_flight` cap on a preferred endpoint makes it primary-with-spill.

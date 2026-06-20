@@ -28,7 +28,7 @@ Works on any EVM chain (every capability is a generic `eth_*` method; presets fo
 drm3-rpc-pool = { git = "https://github.com/DRM3Labs-OSS/drm3-rpc-pool" }
 ```
 
-```rust
+```rust,ignore
 use drm3_rpc_pool::{presets, RpcPool};
 use serde_json::json;
 
@@ -88,7 +88,7 @@ One choice decides how a burst is distributed. It is just `priority` (and an opt
 
 Primary-plus-spill, the common production shape - a paid key carries normal load, a burst overflows onto free peers instead of melting the primary:
 
-```rust
+```rust,ignore
 let endpoints = vec![
     RpcEndpoint { priority: 0, max_in_flight: Some(50),         // keyed primary, soft cap
         ..RpcEndpoint::new("https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}") },

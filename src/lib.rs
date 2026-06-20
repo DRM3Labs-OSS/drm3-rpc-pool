@@ -1,23 +1,6 @@
-//! drm3-rpc-pool - resilient JSON-RPC failover pool for any EVM chain.
-//!
-//! Works with any EVM JSON-RPC endpoints (Ethereum, Base, Arbitrum, Optimism,
-//! Polygon, BNB, and so on). Every capability is a generic `eth_*` method;
-//! there is no chain-specific code. Tag each endpoint with the methods you
-//! intend to send there and the pool routes around incapable or unhealthy
-//! providers.
-//!
-//! # Core model
-//!
-//! - An ordered, unbounded pool of endpoints (`RpcPoolConfig`).
-//! - First-success-wins dispatch in priority order.
-//! - Per-endpoint health state, exponential backoff, automatic demotion.
-//! - Capability-based routing (skip endpoints that do not support a method).
-//! - Metrics hook for request count, latency, error rate.
-//! - Transport trait so any HTTP client can drive the pool. A `reqwest`-based
-//!   default implementation ships behind the `reqwest-transport` feature.
-//!
-//! See the README for a usage example.
-
+//! The crate docs are the project README, so docs.rs and an agent reading the
+//! source get the same usage guide. Source of truth: `../README.md`.
+#![doc = include_str!("../README.md")]
 #![warn(clippy::all)]
 #![deny(rust_2018_idioms)]
 
