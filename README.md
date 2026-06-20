@@ -99,6 +99,10 @@ let endpoints = vec![
 
 ## How it works
 
+A dead endpoint, two healthy ones, one call: the pool tries the dead one, fails over, and returns the result. No retry logic in your app.
+
+![Proxy log: the dead primary errors, the pool fails over to base-official, and the client gets the block](./assets/failover.svg)
+
 ```mermaid
 sequenceDiagram
     participant App as Your app

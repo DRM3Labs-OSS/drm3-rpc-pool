@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="284" viewBox="0 0 760 284" role="img" aria-label="Terminal: the dead primary endpoint errors, the pool fails over to a healthy one, and the client gets the block">
+  <defs>
+    <style>.m{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}</style>
+  </defs>
+  <rect width="760" height="284" rx="12" fill="#0d1117" stroke="#30363d"/>
+  <rect width="760" height="38" rx="12" fill="#161b22"/>
+  <rect y="20" width="760" height="18" fill="#161b22"/>
+  <circle cx="24" cy="19" r="6" fill="#f85149"/>
+  <circle cx="44" cy="19" r="6" fill="#d29922"/>
+  <circle cx="64" cy="19" r="6" fill="#3fb950"/>
+  <text x="380" y="24" class="m" fill="#8b949e" text-anchor="middle" font-size="12.5">drm3-rpc-pool  (1 dead endpoint, 2 healthy)</text>
+
+  <text x="22" y="78"  class="m"><tspan fill="#3fb950">$ </tspan><tspan fill="#e6edf3">drm3-rpc-pool --config rpc-pool.toml</tspan></text>
+  <text x="22" y="102" class="m" fill="#8b949e">  listening on http://127.0.0.1:8545 · 3 endpoints</text>
+
+  <text x="22" y="140" class="m"><tspan fill="#3fb950">$ </tspan><tspan fill="#e6edf3">cast block-number --rpc-url http://127.0.0.1:8545</tspan></text>
+  <text x="22" y="166" class="m"><tspan fill="#d29922">  WARN  </tspan><tspan fill="#ff7b72">primary-DOWN</tspan><tspan fill="#8b949e">    transport error, failing over</tspan></text>
+  <text x="22" y="190" class="m"><tspan fill="#3fb950">  ok    </tspan><tspan fill="#e6edf3">base-official</tspan><tspan fill="#8b949e">   rpc success, 445ms</tspan></text>
+  <text x="22" y="218" class="m"><tspan fill="#79c0ff">  47636868</tspan><tspan fill="#6e7681">      # the call is answered, dead primary and all</tspan></text>
+
+  <text x="22" y="256" class="m" fill="#6e7681" font-size="12.5">No retry logic in your app: the pool tried the dead endpoint and failed over.</text>
+</svg>

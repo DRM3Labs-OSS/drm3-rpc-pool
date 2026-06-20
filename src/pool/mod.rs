@@ -433,6 +433,12 @@ impl RpcPool {
                         Ok(RawOutcome::Result(value)) => {
                             entry.health.record_success(latency);
                             self.inner.metrics.on_success(tag, method, latency);
+                            tracing::debug!(
+                                endpoint = %tag,
+                                method = %method,
+                                latency_ms = %latency.as_millis(),
+                                "rpc success"
+                            );
                             return Ok(ForwardResult::Result(value));
                         }
                         Ok(RawOutcome::RpcError(err)) => {
@@ -440,6 +446,12 @@ impl RpcPool {
                             // health (the endpoint is up) and relay it.
                             entry.health.record_success(latency);
                             self.inner.metrics.on_success(tag, method, latency);
+                            tracing::debug!(
+                                endpoint = %tag,
+                                method = %method,
+                                rpc_error_code = %err.code,
+                                "rpc error envelope (relayed)"
+                            );
                             return Ok(ForwardResult::Error {
                                 code: err.code,
                                 message: err.message,
@@ -450,6 +462,12 @@ impl RpcPool {
                             let msg = err.to_string();
                             entry.health.record_failure(&msg, latency);
                             self.inner.metrics.on_failure(tag, method, latency, &msg);
+                            tracing::warn!(
+                                endpoint = %tag,
+                                method = %method,
+                                error = %msg,
+                                "rpc parse/response error, failing over"
+                            );
                             attempts.push((entry.endpoint.url.clone(), msg));
                             continue;
                         }
@@ -461,6 +479,12 @@ impl RpcPool {
                     self.inner
                         .metrics
                         .on_failure(tag, method, latency, &transport_err);
+                    tracing::warn!(
+                        endpoint = %tag,
+                        method = %method,
+                        error = %transport_err,
+                        "rpc transport error, failing over"
+                    );
                     attempts.push((entry.endpoint.url.clone(), transport_err));
                     continue;
                 }
