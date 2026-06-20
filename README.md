@@ -13,10 +13,10 @@
 
 A single hardcoded RPC URL is one point of failure. Public providers 429 you, lag under load, and go down without warning; when yours does, your app does. `drm3-rpc-pool` puts a pool behind one `call` and retries the next healthy endpoint on any 429, error, or timeout. Repeated failures demote an endpoint into exponential-backoff cooldown; one success restores it.
 
-**What you get over a single URL** (measured, with the honest line drawn - [details](./docs/measurements.md)):
+**What you get over a single URL** ([details](./docs/measurements.md)):
 
-- **Reliability - yes, and immediately.** In our load tests a single free public endpoint completed only 30-50% of calls under a burst; a pool of two or more healthy endpoints completed ~all of them. This is the reason to use it.
-- **More throughput from free tiers - no.** Free public RPCs rate-limit per IP and some are flaky, so pooling them does *not* multiply throughput (we measured it). You get a real multiplier only from endpoints with independent capacity - your own keyed providers on separate accounts - where pooling them as peers gives roughly the sum of their limits.
+- **Reliability - yes.** Under a burst, a single free public endpoint completed 30-50% of calls; a pool of two or more completed ~all of them.
+- **More throughput from free tiers - no.** Free public RPCs rate-limit per IP and some are flaky, so pooling them does *not* multiply throughput. Throughput aggregates only across endpoints with independent capacity - your own keyed providers on separate accounts - where pooling them as peers gives roughly the sum of their limits.
 - **Lower cost on heavy workloads - yes.** Cap your paid provider with `max_in_flight` and put free endpoints behind it: bursts spill onto the free tier instead of your metered bill (or invert it to stay free-first).
 
 Works on any EVM chain (every capability is a generic `eth_*` method; presets for Base, Ethereum, Arbitrum, Optimism, Polygon, BNB). Embed it as a **Rust** or **TypeScript** library; if your app is in neither, a language-agnostic [proxy](#proxy-for-any-other-language) is included.

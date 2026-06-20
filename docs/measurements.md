@@ -1,44 +1,34 @@
-# What pooling gets you (measured)
+# What pooling gets you
 
-Plain answers to one question: what does putting a pool behind a single call
-actually buy you, versus one hardcoded RPC URL? Here is what we measured and
-where the honest line is.
+What a pool of endpoints does for you over one hardcoded RPC URL.
 
-## Reliability: yes, and it shows up immediately
+## Reliability
 
-A single endpoint that rate-limits (429) or has a bad minute takes your call
-with it. A pool retries the next healthy endpoint on any 429, error, or timeout.
+A single endpoint that rate-limits (429) or has a bad minute takes your call with
+it. A pool retries the next healthy endpoint on any 429, error, or timeout.
 
-In our own load tests against free public Base endpoints (a burst of a few
-hundred requests at high concurrency), a single endpoint completed only
-**30-50% of calls**; the full pool completed **~90-100%** (one representative
-run: 37% on one endpoint, 91% across five). Exact numbers swing run to run
-because free endpoints are flaky, but the direction is steady and the gap is
-large: one endpoint drops calls under load, a pool keeps them. This is the
-reason to use it.
+In load tests against free public Base endpoints (a burst of a few hundred
+requests at high concurrency), a single endpoint completed 30-50% of calls; the
+full pool completed 90-100% (one run: 37% on one endpoint, 91% across five). The
+numbers move run to run because free endpoints are flaky; the gap does not.
 
-## More throughput from free tiers: no, not from free public RPCs
+## Throughput
 
-It is tempting to assume that pooling ten free endpoints gives you ten times the
-throughput. It does not. Free public RPCs rate-limit per IP and some are flaky,
-so spreading a heavy burst across them does not scale: we swept pool sizes 1
-through 5 and throughput peaked at two or three endpoints, then fell as load
-landed on slower or failing ones. Treat free public endpoints as failover and
-overflow, not a throughput farm.
+Pooling ten free endpoints does not give you ten times the throughput. Free
+public RPCs rate-limit per IP and some are flaky: a sweep of pool sizes 1 through
+5 peaks at two or three endpoints, then falls as load lands on slower or failing
+ones. Free public endpoints are failover and overflow, not a throughput farm.
 
-You get a real throughput multiplier only when the endpoints have their own
-**independent capacity** - your own keyed providers on separate accounts or
-plans. Pool those as peers (equal `priority`) and your usable rate is roughly
-the sum of their limits. Point the load test below at your keyed endpoints to
-measure your own setup.
+Throughput aggregates only across endpoints with their own independent capacity -
+your keyed providers on separate accounts. Pool those as peers (equal `priority`)
+and your usable rate is roughly the sum of their limits.
 
-## Offsetting cost on a high-call workload: yes
+## Cost
 
-If you make a lot of calls and want to cap a metered bill, put your paid
-provider first with a `max_in_flight` cap and free endpoints behind it. Normal
-traffic runs on the paid key; bursts over the cap spill onto the free endpoints
-instead of onto your bill. Invert it (free first, paid as the safety net) if you
-would rather stay on the free tier and only pay when free capacity runs out.
+To cap a metered bill, put your paid provider first with a `max_in_flight` cap
+and free endpoints behind it. Traffic runs on the paid key; bursts over the cap
+spill onto the free endpoints. Invert it (free first, paid as the safety net) to
+stay on the free tier and pay only when free capacity runs out.
 
 ## Measure your own pool
 
@@ -49,7 +39,5 @@ cargo run --release --example throughput -- \
 ```
 
 Prints one JSON line per pool size with success rate, throughput, and p50/p95
-latency (median of `--runs`, with a min-max band). Against free public endpoints
-expect noisy throughput and a clear success-rate gain; against endpoints with
-real capacity, both gains are clear. See
-[Configure routing](../README.md#configure-routing) for how to set it up.
+latency (median of `--runs`, with a min-max band). See
+[Configure routing](../README.md#configure-routing) to set it up.
