@@ -1,6 +1,6 @@
 [package]
 name = "drm3-rpc-pool"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Resilient JSON-RPC failover pool for any EVM chain. Unbounded ordered endpoint list, per-endpoint health + backoff, capability routing, first-success-wins dispatch."
 license = "MIT"
@@ -44,7 +44,7 @@ web-time = "1"
 # Daemon-only dependencies.
 axum = { version = "0.8", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

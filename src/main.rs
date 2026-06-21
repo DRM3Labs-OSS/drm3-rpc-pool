@@ -12,8 +12,18 @@
 
 use std::net::SocketAddr;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use drm3_rpc_pool::{presets, proxy, RpcPool, RpcPoolConfig};
+
+/// Log output format for the proxy. `json` emits one structured event per line
+/// (route decisions, per-endpoint outcome, latency, error/status), so you can
+/// pipe stdout to any log sink. `text` is the default human-readable form.
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq)]
+enum LogFormat {
+    #[default]
+    Text,
+    Json,
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -26,6 +36,10 @@ struct Cli {
     /// the proxy with no subcommand.
     #[arg(short, long, global = true)]
     config: Option<String>,
+
+    /// Log format: `text` (human) or `json` (one structured event per line).
+    #[arg(long, value_enum, default_value_t = LogFormat::Text, global = true)]
+    log_format: LogFormat,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -53,7 +67,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Command::Init { chain }) => init(&chain),
-        None => serve(cli.config.as_deref().unwrap_or("rpc-pool.toml")).await,
+        None => serve(cli.config.as_deref().unwrap_or("rpc-pool.toml"), cli.log_format).await,
     }
 }
 
@@ -94,8 +108,8 @@ fn init(chain: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Load config and run the HTTP proxy server.
-async fn serve(config_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    init_tracing();
+async fn serve(config_path: &str, log_format: LogFormat) -> Result<(), Box<dyn std::error::Error>> {
+    init_tracing(log_format);
 
     let cfg = RpcPoolConfig::from_toml_file(config_path)?;
     let listen = cfg.listen.clone();
@@ -119,9 +133,18 @@ async fn serve(config_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn init_tracing() {
+fn init_tracing(log_format: LogFormat) {
     use tracing_subscriber::{fmt, EnvFilter};
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("drm3_rpc_pool=info,info"));
-    let _ = fmt().with_env_filter(filter).try_init();
+    match log_format {
+        // One structured event per line: route decisions, per-endpoint outcome,
+        // latency, request/response bytes, error/status. Pipe stdout anywhere.
+        LogFormat::Json => {
+            let _ = fmt().json().flatten_event(true).with_env_filter(filter).try_init();
+        }
+        LogFormat::Text => {
+            let _ = fmt().with_env_filter(filter).try_init();
+        }
+    }
 }

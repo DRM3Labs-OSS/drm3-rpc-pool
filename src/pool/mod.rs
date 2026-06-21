@@ -298,6 +298,7 @@ impl RpcPool {
                 endpoint: entry.endpoint.url.clone(),
                 message: format!("request serialize failed: {e}"),
             })?;
+            let req_bytes = body.len();
 
             let start = Instant::now();
             // Count this request against the endpoint's load for the whole
@@ -318,8 +319,11 @@ impl RpcPool {
                             self.inner.metrics.on_success(tag, method, latency);
                             tracing::debug!(
                                 endpoint = %tag,
+                                url = %entry.endpoint.url,
                                 method = %method,
                                 latency_ms = %latency.as_millis(),
+                                req_bytes,
+                                resp_bytes = bytes.len(),
                                 "rpc success"
                             );
                             return Ok(value);
@@ -418,6 +422,7 @@ impl RpcPool {
                 endpoint: entry.endpoint.url.clone(),
                 message: format!("request serialize failed: {e}"),
             })?;
+            let req_bytes = body.len();
 
             let start = Instant::now();
             let _load = InFlightGuard::enter(&entry.in_flight);
@@ -435,8 +440,11 @@ impl RpcPool {
                             self.inner.metrics.on_success(tag, method, latency);
                             tracing::debug!(
                                 endpoint = %tag,
+                                url = %entry.endpoint.url,
                                 method = %method,
                                 latency_ms = %latency.as_millis(),
+                                req_bytes,
+                                resp_bytes = bytes.len(),
                                 "rpc success"
                             );
                             return Ok(ForwardResult::Result(value));
