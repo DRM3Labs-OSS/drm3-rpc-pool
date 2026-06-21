@@ -194,7 +194,7 @@ drm3-rpc-pool --config rpc-pool.toml         # serves on 127.0.0.1:8545
 - `GET /health` - `200` with `{ status, endpoints_total, endpoints_healthy }`, `503` if empty.
 - `GET /metrics` - per-endpoint status + live health, JSON.
 
-**Structured logs.** Run with `--log-format json` and the proxy emits one JSON event per line on stdout (route decision, endpoint, url, method, latency, request/response bytes, and error/status on failover), so you can pipe it to any log sink. `RUST_LOG=drm3_rpc_pool=debug` includes the per-attempt success/failover events. On top of those, a per-endpoint **rollup** event is emitted every `ROLLUP_WINDOW_S` seconds (default 60, set 0 to disable) with the window's request count, success rate, and p50/p95 latency.
+**Structured logs.** Run with `--log-format json` and the proxy emits one JSON event per line on stdout (route decision, endpoint, url, method, latency, request/response bytes, and a typed `status` + error on failover), so you can pipe it to any log sink. `RUST_LOG=drm3_rpc_pool=debug` includes the per-attempt success/failover events. On top of those, a per-endpoint **rollup** event is emitted every `ROLLUP_WINDOW_S` seconds (default 60, set 0 to disable) with the window's request count, success rate, and p50/p95 latency.
 
 > **Binding `0.0.0.0` exposes an unauthenticated relay.** The proxy has no auth of its own, so anything that reaches the listen address can spend your keyed providers. The default `listen = "127.0.0.1:8545"` is localhost-only and safe; only set `0.0.0.0` behind a firewall or your own auth.
 

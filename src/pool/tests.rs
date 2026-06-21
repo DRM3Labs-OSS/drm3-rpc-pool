@@ -889,3 +889,11 @@ async fn saturated_primary_spills_to_failover() {
         "the overflow request spills to the standby"
     );
 }
+
+#[test]
+fn http_status_of_parses_code_or_zero() {
+    assert_eq!(http_status_of("http 429 rate limited"), 429);
+    assert_eq!(http_status_of("http 503"), 503);
+    assert_eq!(http_status_of("send error: connection refused"), 0);
+    assert_eq!(http_status_of("read error: eof"), 0);
+}

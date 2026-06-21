@@ -67,6 +67,18 @@ impl Drop for InFlightGuard<'_> {
     }
 }
 
+/// HTTP status code from a transport error message of the form `http <code>
+/// ...` (the contract the bundled transport emits on a non-2xx response), or
+/// `0` for transport-level failures (timeout, DNS, connection refused) that
+/// never received an HTTP response. Used to log `status` as a typed field
+/// without changing the public `Transport` error type.
+fn http_status_of(msg: &str) -> u16 {
+    msg.strip_prefix("http ")
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|code| code.parse().ok())
+        .unwrap_or(0)
+}
+
 /// The RPC pool. Clone is cheap - all state is behind `Arc`.
 pub struct RpcPool {
     inner: Arc<PoolInner>,
@@ -352,6 +364,7 @@ impl RpcPool {
                     tracing::warn!(
                         endpoint = %tag,
                         method = %method,
+                        status = http_status_of(&transport_err),
                         error = %transport_err,
                         "rpc transport error"
                     );
@@ -490,6 +503,7 @@ impl RpcPool {
                     tracing::warn!(
                         endpoint = %tag,
                         method = %method,
+                        status = http_status_of(&transport_err),
                         error = %transport_err,
                         "rpc transport error, failing over"
                     );
