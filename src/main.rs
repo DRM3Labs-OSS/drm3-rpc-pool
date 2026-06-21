@@ -12,8 +12,14 @@
 
 use std::net::SocketAddr;
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use clap::{Parser, Subcommand, ValueEnum};
-use drm3_rpc_pool::{presets, proxy, RpcPool, RpcPoolConfig};
+use drm3_rpc_pool::{
+    presets, proxy, rollup::RollupMetrics, BackoffPolicy, ReqwestTransport, RpcPool, RpcPoolConfig,
+    Transport,
+};
 
 /// Log output format for the proxy. `json` emits one structured event per line
 /// (route decisions, per-endpoint outcome, latency, error/status), so you can
@@ -114,7 +120,32 @@ async fn serve(config_path: &str, log_format: LogFormat) -> Result<(), Box<dyn s
     let cfg = RpcPoolConfig::from_toml_file(config_path)?;
     let listen = cfg.listen.clone();
     let endpoint_count = cfg.endpoints.len();
-    let pool = RpcPool::from_config(cfg)?;
+
+    // Build the pool with rollup metrics so we can emit a periodic per-endpoint
+    // statistical summary. Transport choice mirrors RpcPool::from_config.
+    let transport: Arc<dyn Transport> = match cfg.request_timeout_ms {
+        Some(ms) => Arc::new(ReqwestTransport::with_timeout(Duration::from_millis(ms))),
+        None => Arc::new(ReqwestTransport::new()),
+    };
+    let rollup = Arc::new(RollupMetrics::new());
+    let pool = RpcPool::new(cfg, transport, rollup.clone(), BackoffPolicy::default())?;
+
+    // Flush a tumbling window every ROLLUP_WINDOW_S seconds (default 60; 0 = off).
+    let window_s: u64 = std::env::var("ROLLUP_WINDOW_S")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+    if window_s > 0 {
+        let rollup = rollup.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(window_s));
+            tick.tick().await; // consume the immediate first tick
+            loop {
+                tick.tick().await;
+                rollup.flush(window_s);
+            }
+        });
+    }
 
     let app = proxy::build_router(pool);
 

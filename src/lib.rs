@@ -12,6 +12,7 @@ pub mod pool;
 pub mod presets;
 #[cfg(feature = "daemon")]
 pub mod proxy;
+pub mod rollup;
 pub mod send_sync;
 pub mod transport;
 
