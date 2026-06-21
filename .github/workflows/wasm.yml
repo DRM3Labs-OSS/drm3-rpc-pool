@@ -79,7 +79,12 @@ jobs:
         run: wasm-pack pack bindings/wasm
 
       - name: Publish to npm
-        run: npm publish --access public
         working-directory: bindings/wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN not set - skipping npm publish. The wasm package still builds; add the secret to enable publishing."
+            exit 0
+          fi
+          npm publish --access public

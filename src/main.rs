@@ -73,7 +73,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Command::Init { chain }) => init(&chain),
-        None => serve(cli.config.as_deref().unwrap_or("rpc-pool.toml"), cli.log_format).await,
+        None => {
+            serve(
+                cli.config.as_deref().unwrap_or("rpc-pool.toml"),
+                cli.log_format,
+            )
+            .await
+        }
     }
 }
 
@@ -172,7 +178,11 @@ fn init_tracing(log_format: LogFormat) {
         // One structured event per line: route decisions, per-endpoint outcome,
         // latency, request/response bytes, error/status. Pipe stdout anywhere.
         LogFormat::Json => {
-            let _ = fmt().json().flatten_event(true).with_env_filter(filter).try_init();
+            let _ = fmt()
+                .json()
+                .flatten_event(true)
+                .with_env_filter(filter)
+                .try_init();
         }
         LogFormat::Text => {
             let _ = fmt().with_env_filter(filter).try_init();
