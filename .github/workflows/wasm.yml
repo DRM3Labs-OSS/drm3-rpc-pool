@@ -39,52 +39,8 @@ jobs:
           test -f bindings/wasm/pkg/drm3_rpc_pool_wasm_bg.wasm
           echo "wasm pkg OK"
 
-  # ──────────────────────────────────────────────────────────────────────
-  # DORMANT publish job. It only runs on a `v*` tag, and even then it needs:
-  #   1. The repository to be PUBLIC (npm publish of a public scoped package).
-  #   2. An `NPM_TOKEN` repository secret with publish rights to the
-  #      @drm3labs-oss scope. Until that secret exists this job is a no-op /
-  #      will fail fast at the publish step by design.
-  # Remove this comment and confirm the scope/secret before relying on it.
-  # ──────────────────────────────────────────────────────────────────────
-  publish:
-    name: npm publish (dormant)
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Build (web target)
-        run: wasm-pack build bindings/wasm --target web
-
-      - name: Finalize package (scoped name + README)
-        run: node bindings/wasm/finalize-pkg.mjs
-        working-directory: ${{ github.workspace }}
-
-      # `wasm-pack pack` tarballs the pkg/ dir; `npm publish` does the upload.
-      - name: Pack
-        run: wasm-pack pack bindings/wasm
-
-      - name: Publish to npm
-        working-directory: bindings/wasm/pkg
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "NPM_TOKEN not set - skipping npm publish. The wasm package still builds; add the secret to enable publishing."
-            exit 0
-          fi
-          npm publish --access public
+  # NOTE: npm publishing lives in release.yml (the single canonical publisher,
+  # alongside the binary + crates.io release). This workflow is build/verify
+  # ONLY. A duplicate "dormant" publish job used to live here; it was removed
+  # because it raced release.yml on every tag and the loser failed with
+  # "cannot publish over the existing version."
