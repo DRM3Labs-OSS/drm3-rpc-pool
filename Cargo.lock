@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "drm3-rpc-pool"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-trait",
  "axum",
