@@ -8,7 +8,7 @@
 
 [package]
 name = "drm3-rpc-pool-wasm"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 description = "Browser + Node WASM binding for drm3-rpc-pool: a resilient JSON-RPC failover pool driven by the platform `fetch`."
 license = "MIT"

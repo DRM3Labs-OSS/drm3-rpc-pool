@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "drm3-rpc-pool"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "drm3-rpc-pool-wasm"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "async-trait",
  "console_error_panic_hook",

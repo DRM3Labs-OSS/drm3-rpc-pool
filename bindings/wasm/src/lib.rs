@@ -22,7 +22,7 @@ mod fetch_transport;
 use std::sync::Arc;
 
 use drm3_rpc_pool::{BackoffPolicy, NoopMetrics, RpcPool as CoreRpcPool, RpcPoolConfig, Transport};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 
@@ -132,7 +132,12 @@ impl RpcPool {
             .await
             .map_err(|e| JsError::new(&e.to_string()))?;
 
-        serde_wasm_bindgen::to_value(&result)
+        // json_compatible(), NOT the default to_value: the default serializes
+        // JSON objects as JS `Map`s, so consumers doing `log.topics` or
+        // `receipt.status` get `undefined`. json_compatible emits plain objects,
+        // which is what every JSON-RPC caller expects.
+        result
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
             .map_err(|e| JsError::new(&format!("result serialize failed: {e}")))
     }
 
@@ -146,7 +151,8 @@ impl RpcPool {
     #[wasm_bindgen]
     pub fn status(&self) -> Result<JsValue, JsError> {
         let snapshot = self.inner.status();
-        serde_wasm_bindgen::to_value(&snapshot)
+        snapshot
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
             .map_err(|e| JsError::new(&format!("status serialize failed: {e}")))
     }
 }
