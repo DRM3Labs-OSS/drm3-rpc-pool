@@ -329,15 +329,31 @@ impl RpcPool {
                         Ok(value) => {
                             entry.health.record_success(latency);
                             self.inner.metrics.on_success(tag, method, latency);
-                            tracing::debug!(
-                                endpoint = %tag,
-                                url = %entry.endpoint.url,
-                                method = %method,
-                                latency_ms = %latency.as_millis(),
-                                req_bytes,
-                                resp_bytes = bytes.len(),
-                                "rpc success"
-                            );
+                            // Surface when the pool earned its keep. A clean first-try
+                            // success stays at debug; a success that landed only after
+                            // failing over past N dead/limited peers logs at info with
+                            // the recovery count, so operators can see how often the
+                            // pool is turning would-be failures into completed calls.
+                            if attempts.is_empty() {
+                                tracing::debug!(
+                                    endpoint = %tag,
+                                    url = %entry.endpoint.url,
+                                    method = %method,
+                                    latency_ms = %latency.as_millis(),
+                                    req_bytes,
+                                    resp_bytes = bytes.len(),
+                                    "rpc success"
+                                );
+                            } else {
+                                tracing::info!(
+                                    endpoint = %tag,
+                                    url = %entry.endpoint.url,
+                                    method = %method,
+                                    latency_ms = %latency.as_millis(),
+                                    recovered_after = attempts.len(),
+                                    "rpc success after failover"
+                                );
+                            }
                             return Ok(value);
                         }
                         Err(err) => {
@@ -383,6 +399,14 @@ impl RpcPool {
             });
         }
 
+        tracing::warn!(
+            method = %method,
+            considered,
+            tried,
+            rate_limited,
+            failed = attempts.len(),
+            "rpc call exhausted every candidate"
+        );
         Err(RpcError::AllFailed {
             method: method.to_string(),
             count: attempts.len(),

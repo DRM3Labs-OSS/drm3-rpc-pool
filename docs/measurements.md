@@ -14,14 +14,35 @@ numbers move run to run because free endpoints are flaky; the gap does not.
 
 ## Throughput
 
-Pooling ten free endpoints does not give you ten times the throughput. Free
-public RPCs rate-limit per IP and some are flaky: a sweep of pool sizes 1 through
-5 peaks at two or three endpoints, then falls as load lands on slower or failing
-ones. Free public endpoints are failover and overflow, not a throughput farm.
+There are two different numbers here, and conflating them is where people go
+wrong.
 
-Throughput aggregates only across endpoints with their own independent capacity -
-your keyed providers on separate accounts. Pool those as peers (equal `priority`)
-and your usable rate is roughly the sum of their limits.
+**Usable throughput (successful calls/sec) - up to ~10x.** A single free endpoint
+under load fails most of its calls, so the rate that actually *lands* is a
+fraction of what you attempt. A small pool routes around the failures and lands
+~all of them. One live Base sweep (300 requests, concurrency 80, median of 2):
+
+| Pool size | Success rate | Raw req/s | **Usable req/s** (raw x success) |
+|-----------|--------------|-----------|----------------------------------|
+| 1         | ~25%         | 196       | **~49**                          |
+| 2         | ~100%        | 522       | **~522**                         |
+| 3         | ~100%        | 172       | ~172                             |
+| 4         | ~100%        | 184       | ~184                             |
+| 5         | ~100%        | 173       | ~173                             |
+
+That is the order-of-magnitude story: ~49 -> ~522 usable req/s going from one
+endpoint to a pool. The single-endpoint success rate swings run to run (0-50%),
+so the exact multiple swings with it, but the direction never does.
+
+**Raw capacity does NOT scale linearly.** Notice raw req/s *peaks at 2 endpoints
+then falls* - free public RPCs rate-limit per IP and some are flaky, so adding
+slower peers drags a spread-routed pool down. ~2-3 quality endpoints is the
+throughput sweet spot; past that you are buying redundancy, not speed. Pooling
+ten free endpoints does NOT give you ten times the raw rate.
+
+Raw throughput aggregates linearly only across endpoints with their own
+independent capacity - your keyed providers on separate accounts. Pool those as
+peers (equal `priority`) and your usable rate is roughly the sum of their limits.
 
 ## Cost
 

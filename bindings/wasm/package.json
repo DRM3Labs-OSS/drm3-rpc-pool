@@ -1,7 +1,7 @@
 {
   "//": "Reference manifest for the published npm package. wasm-pack regenerates pkg/package.json from Cargo.toml on every build; the `npm run pkg:name` script (and the CI workflow) rewrites the generated pkg/package.json `name` to this scoped name and copies README.md in before publish. This file documents the intended published shape.",
   "name": "@drm3labs-oss/rpc-pool",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Resilient JSON-RPC failover pool for any EVM chain, compiled to WASM. Runs failover, per-endpoint health, backoff, and capability routing in the browser or Node; the network is done by the platform fetch.",
   "type": "module",
   "license": "MIT",

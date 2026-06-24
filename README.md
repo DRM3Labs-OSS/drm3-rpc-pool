@@ -17,9 +17,9 @@ A single hardcoded RPC URL is one point of failure. Public providers 429 you, la
 
 **What you get over a single URL** ([details](./docs/measurements.md)):
 
-- **Reliability - yes.** Under a burst, a single free public endpoint completed 30-50% of calls; a pool of two or more completed ~all of them.
-- **More throughput from free tiers - no.** Free public RPCs rate-limit per IP and some are flaky, so pooling them does *not* multiply throughput. Throughput aggregates only across endpoints with independent capacity - your own keyed providers on separate accounts - where pooling them as peers gives roughly the sum of their limits.
-- **Lower cost on heavy workloads - yes.** Cap your paid provider with `max_in_flight` and put free endpoints behind it: bursts spill onto the free tier instead of your metered bill (or invert it to stay free-first).
+- **Usable throughput - up to ~10x on free tiers.** Under a burst, a single free public endpoint completed only ~25% of calls (~49 *successful* req/s in one sweep); a small pool completed ~100% (~522 successful req/s). That is the headline: an order-of-magnitude more calls that actually land, because the pool routes around the ones that 429, lag, or die.
+- **Raw capacity does NOT scale linearly - sweet spot is ~2-3 endpoints.** Free public RPCs rate-limit per IP and some are flaky, so raw req/s *peaks at two or three endpoints, then falls* as load reaches slower peers. Past that you are buying redundancy, not speed. Throughput aggregates linearly only across endpoints with independent capacity - your own keyed providers on separate accounts, pooled as peers.
+- **Lower cost on heavy workloads.** Cap your paid provider with `max_in_flight` and put free endpoints behind it: bursts spill onto the free tier instead of your metered bill (or invert it to stay free-first).
 
 Works on any EVM chain (every capability is a generic `eth_*` method; presets for Base, Ethereum, Arbitrum, Optimism, Polygon, BNB). Embed it as a **Rust** or **TypeScript** library; if your app is in neither, a language-agnostic [proxy](#proxy-for-any-other-language) is included.
 
@@ -130,7 +130,7 @@ sequenceDiagram
 ## Gotchas
 
 - **The proxy has no auth.** Anything that can reach its listen address can spend your keyed providers. The default `127.0.0.1` bind is safe; only use `0.0.0.0` behind a firewall or your own auth.
-- **Free public endpoints are failover, not a throughput farm.** They rate-limit per IP and some are flaky. Pooling them buys reliability, not raw req/s; don't expect throughput to scale with pool size on free endpoints ([why](./docs/measurements.md)).
+- **Free public endpoints multiply *usable* throughput, not raw capacity.** Pooling lands ~all your calls instead of the ~25% a single flaky free endpoint manages (the ~10x usable-throughput win), but raw req/s peaks at ~2-3 endpoints then falls - they rate-limit per IP and some are flaky. Don't expect raw rate to scale with pool size on free endpoints ([the numbers](./docs/measurements.md)).
 - **Spreading sends traffic to every peer, including a bad one,** until health-backoff demotes it (2 failures). If a set of endpoints is known to be uneven in quality, ranked failover (distinct `priority`) can be steadier than peers.
 - **`request_timeout_ms` is advisory in the WASM build** - it relies on the platform `fetch` default rather than an abort deadline.
 - **The pool can't authenticate *you* to a provider.** Keyed access still needs the key, set per endpoint via `auth` and `${ENV_VAR}`.
