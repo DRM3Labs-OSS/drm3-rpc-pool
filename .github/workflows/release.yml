@@ -91,7 +91,7 @@ jobs:
           (Get-FileHash $out -Algorithm SHA256).Hash.ToLower() + "  " + $out | Out-File -Encoding ascii "$out.sha256"
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             drm3-rpc-pool-${{ github.ref_name }}-${{ matrix.target }}.*
@@ -114,7 +114,7 @@ jobs:
           cat sums/*.sha256 | sort > SHA256SUMS
 
       - name: Upload SHA256SUMS
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: SHA256SUMS
 
