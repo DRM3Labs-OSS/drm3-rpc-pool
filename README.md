@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/ci.yml)
 [![WASM](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml/badge.svg)](https://github.com/DRM3Labs-OSS/drm3-rpc-pool/actions/workflows/wasm.yml)
+[![crates.io](https://img.shields.io/crates/v/drm3-rpc-pool.svg?logo=rust)](https://crates.io/crates/drm3-rpc-pool)
+[![npm](https://img.shields.io/npm/v/@drm3labs-oss/rpc-pool.svg?logo=npm)](https://www.npmjs.com/package/@drm3labs-oss/rpc-pool)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 ![Rust 2021](https://img.shields.io/badge/rust-2021-orange?logo=rust)
 
