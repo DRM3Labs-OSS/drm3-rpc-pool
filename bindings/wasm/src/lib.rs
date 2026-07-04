@@ -156,3 +156,21 @@ impl RpcPool {
             .map_err(|e| JsError::new(&format!("status serialize failed: {e}")))
     }
 }
+
+/// The bundled free-peer list for a chain, as an array of `{ url, priority, ... }`
+/// endpoint objects ready to drop straight into `new RpcPool({ endpoints })`.
+///
+/// Chains: `"base"`, `"ethereum"` (aka `"eth"`/`"mainnet"`), `"arbitrum"`,
+/// `"optimism"`, `"polygon"`, `"bnb"`. Unknown chain -> empty array.
+///
+/// ```js
+/// import { RpcPool, peersFor } from "@drm3labs-oss/rpc-pool";
+/// const pool = new RpcPool({ endpoints: peersFor("base") });
+/// ```
+#[wasm_bindgen(js_name = peersFor)]
+pub fn peers_for(chain: &str) -> Result<JsValue, JsError> {
+    let endpoints = drm3_rpc_pool::presets::endpoints_for(chain).unwrap_or_default();
+    endpoints
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .map_err(|e| JsError::new(&format!("peersFor serialize failed: {e}")))
+}
