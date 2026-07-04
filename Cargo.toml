@@ -1,6 +1,6 @@
 [package]
 name = "drm3-rpc-pool"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 description = "Resilient JSON-RPC failover pool for any EVM chain. Unbounded ordered endpoint list, per-endpoint health + backoff, capability routing, first-success-wins dispatch."
 license = "MIT"
