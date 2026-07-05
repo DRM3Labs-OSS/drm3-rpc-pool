@@ -89,7 +89,10 @@ pub fn base() -> Vec<RpcEndpoint> {
         ("base-meowrpc", "https://base.meowrpc.com"),
         ("base-blastapi", "https://base-mainnet.public.blastapi.io"),
         ("base-blockpi", "https://base.blockpi.network/v1/rpc/public"),
-        ("base-omniatech", "https://endpoints.omniatech.io/v1/base/mainnet/public"),
+        (
+            "base-omniatech",
+            "https://endpoints.omniatech.io/v1/base/mainnet/public",
+        ),
         ("base-nodies", "https://base-pokt.nodies.app"),
     ])
 }
