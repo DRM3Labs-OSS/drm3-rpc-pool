@@ -1,5 +1,7 @@
 # What pooling gets you
 
+> **Status: LIVE** - 2026-09-07. Measured behaviour of the pool as built: the numbers come from the shipped `examples/throughput.rs` sweep against public Base endpoints and describe what the released library and proxy do today.
+
 What a pool of endpoints does for you over one hardcoded RPC URL.
 
 ## Reliability
@@ -61,4 +63,4 @@ cargo run --release --example throughput -- \
 
 Prints one JSON line per pool size with success rate, throughput, and p50/p95
 latency (median of `--runs`, with a min-max band). See
-[Configure routing](../README.md#configure-routing) to set it up.
+[Configure routing](../../README.md#configure-routing) to set it up.

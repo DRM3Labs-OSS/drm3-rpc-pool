@@ -7,7 +7,7 @@ What it gets you over a single RPC URL: reliability (one endpoint dropping calls
 ## Docs
 - [README.md](./README.md): what it is, Rust and TypeScript quickstarts, routing config, how it works, gotchas, best practices
 - [AGENTS.md](./AGENTS.md): operational guide (build, run the proxy, conventions)
-- [docs/measurements.md](./docs/measurements.md): what pooling measurably gets you (reliability, throughput, cost)
+- [docs/architecture/measurements.md](./docs/architecture/measurements.md): what pooling measurably gets you (reliability, throughput, cost)
 - [bindings/wasm/README.md](./bindings/wasm/README.md): the TypeScript/WASM package
 
 ## Use
