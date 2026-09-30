@@ -1,7 +1,7 @@
-# AGENTS.md - drm3-rpc-pool
+# Development - drm3-rpc-pool
 
-Operational, as-built guide. Enough to run the proxy or use the library
-immediately.
+Operational, as-built development guide. Enough to build, run the proxy, or use
+the library immediately.
 
 ## What this is
 
