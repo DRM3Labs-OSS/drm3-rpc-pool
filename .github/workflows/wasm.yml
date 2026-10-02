@@ -1,10 +1,15 @@
 name: WASM
 
+# Third-party actions are pinned to commit SHAs and wasm-pack is installed from
+# crates.io at a pinned version (see the supply-chain note in release.yml).
 on:
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   # Build check: every push/PR confirms the wasm binding still compiles to
@@ -13,18 +18,18 @@ jobs:
     name: wasm-pack build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           targets: wasm32-unknown-unknown
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: bindings/wasm
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: cargo install --locked wasm-pack --version 0.14.0
 
       - name: Build (web target)
         run: wasm-pack build bindings/wasm --target web
