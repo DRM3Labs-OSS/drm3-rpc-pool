@@ -16,7 +16,9 @@ pub mod rollup;
 pub mod send_sync;
 pub mod transport;
 
-pub use config::{expand_env, Auth, RpcCapability, RpcEndpoint, RpcPoolConfig, DEFAULT_LISTEN};
+pub use config::{
+    expand_env, Auth, RpcCapability, RpcEndpoint, RpcEndpointStatus, RpcPoolConfig, DEFAULT_LISTEN,
+};
 pub use error::RpcError;
 pub use health::{BackoffPolicy, EndpointHealth, EndpointStatus};
 pub use metrics::{Metrics, NoopMetrics};

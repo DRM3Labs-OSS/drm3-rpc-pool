@@ -15,7 +15,7 @@ use web_time::Instant;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::config::{RpcCapability, RpcEndpoint, RpcPoolConfig};
+use crate::config::{RpcCapability, RpcEndpoint, RpcEndpointStatus, RpcPoolConfig};
 use crate::error::RpcError;
 use crate::health::{BackoffPolicy, EndpointHealth, EndpointStatus};
 use crate::metrics::Metrics;
@@ -32,7 +32,7 @@ mod tests;
 mod wire;
 
 use rate_limit::RateLimiter;
-use wire::{classify_response, parse_rpc_response, JsonRpcRequest, RawOutcome};
+use wire::{classify_response, JsonRpcRequest, RawOutcome, ResponseError};
 
 // ── Pool state ───────────────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ impl RpcPool {
             .entries
             .iter()
             .map(|e| PoolEntryStatus {
-                endpoint: e.endpoint.clone(),
+                endpoint: e.endpoint.status_view(),
                 health: e.health.snapshot(),
             })
             .collect()
@@ -265,8 +265,14 @@ impl RpcPool {
     }
 
     /// Dispatch a JSON-RPC call. Prefers lower-priority endpoints, spreads
-    /// across equal-priority peers by least in-flight load, and fails over on
-    /// the first error; first success wins.
+    /// across equal-priority peers by least in-flight load, and fails over to
+    /// the next candidate only on a transport/HTTP failure or an unparseable
+    /// body; first success wins.
+    ///
+    /// A well-formed JSON-RPC answer never demotes an endpoint: a `result`
+    /// (including `{"result": null}`) returns `Ok`, and an upstream error
+    /// envelope is returned as [`RpcError::JsonRpc`] from the endpoint that
+    /// produced it, without failing over.
     ///
     /// `params` must serialize to a JSON array per the JSON-RPC spec. Passing
     /// `json!(null)` or `json!({})` is allowed if the method expects it.
@@ -307,7 +313,7 @@ impl RpcPool {
                 params: params.clone(),
             })
             .map_err(|e| RpcError::Malformed {
-                endpoint: entry.endpoint.url.clone(),
+                endpoint: entry.endpoint.tag().to_string(),
                 message: format!("request serialize failed: {e}"),
             })?;
             let req_bytes = body.len();
@@ -325,8 +331,8 @@ impl RpcPool {
             {
                 Ok(bytes) => {
                     let latency = start.elapsed();
-                    match parse_rpc_response(&bytes) {
-                        Ok(value) => {
+                    match classify_response(&bytes) {
+                        Ok(RawOutcome::Result(value)) => {
                             entry.health.record_success(latency);
                             self.inner.metrics.on_success(tag, method, latency);
                             // Surface when the pool earned its keep. A clean first-try
@@ -334,10 +340,10 @@ impl RpcPool {
                             // failing over past N dead/limited peers logs at info with
                             // the recovery count, so operators can see how often the
                             // pool is turning would-be failures into completed calls.
+                            // The key-bearing URL is never logged - only the tag.
                             if attempts.is_empty() {
                                 tracing::debug!(
                                     endpoint = %tag,
-                                    url = %entry.endpoint.url,
                                     method = %method,
                                     latency_ms = %latency.as_millis(),
                                     req_bytes,
@@ -347,7 +353,6 @@ impl RpcPool {
                             } else {
                                 tracing::info!(
                                     endpoint = %tag,
-                                    url = %entry.endpoint.url,
                                     method = %method,
                                     latency_ms = %latency.as_millis(),
                                     recovered_after = attempts.len(),
@@ -356,7 +361,37 @@ impl RpcPool {
                             }
                             return Ok(value);
                         }
+                        Ok(RawOutcome::RpcError(rpc_err)) => {
+                            // A well-formed JSON-RPC error envelope (a revert,
+                            // "method not found", bad params) is a *valid* upstream
+                            // answer: the endpoint is up. Record success and surface
+                            // the error to the caller rather than demoting the
+                            // endpoint and failing over to a healthy peer.
+                            entry.health.record_success(latency);
+                            self.inner.metrics.on_success(tag, method, latency);
+                            tracing::debug!(
+                                endpoint = %tag,
+                                method = %method,
+                                rpc_error_code = %rpc_err.code,
+                                "rpc error envelope (relayed)"
+                            );
+                            return Err(RpcError::JsonRpc {
+                                endpoint: tag.to_string(),
+                                code: rpc_err.code,
+                                message: rpc_err.message,
+                            });
+                        }
+                        Err(ResponseError::EmptyResult) => {
+                            // `{"result": null}` (e.g. a pending
+                            // getTransactionReceipt) is a legitimate answer, not a
+                            // failure: record success and return JSON null.
+                            entry.health.record_success(latency);
+                            self.inner.metrics.on_success(tag, method, latency);
+                            return Ok(Value::Null);
+                        }
                         Err(err) => {
+                            // Unparseable body - the only response-shape outcome
+                            // that demotes the endpoint and fails over.
                             let msg = err.to_string();
                             entry.health.record_failure(&msg, latency);
                             self.inner.metrics.on_failure(tag, method, latency, &msg);
@@ -366,13 +401,16 @@ impl RpcPool {
                                 error = %msg,
                                 "rpc parse/response error"
                             );
-                            attempts.push((entry.endpoint.url.clone(), msg));
+                            attempts.push((tag.to_string(), msg));
                             continue;
                         }
                     }
                 }
                 Err(transport_err) => {
                     let latency = start.elapsed();
+                    // The raw error may embed a key-bearing url_key URL; scrub it
+                    // before it reaches health/last_error, metrics, logs, or attempts.
+                    let transport_err = entry.endpoint.scrub_url(&transport_err);
                     entry.health.record_failure(&transport_err, latency);
                     self.inner
                         .metrics
@@ -384,7 +422,7 @@ impl RpcPool {
                         error = %transport_err,
                         "rpc transport error"
                     );
-                    attempts.push((entry.endpoint.url.clone(), transport_err));
+                    attempts.push((tag.to_string(), transport_err));
                     continue;
                 }
             }
@@ -456,7 +494,7 @@ impl RpcPool {
                 params: params.clone(),
             })
             .map_err(|e| RpcError::Malformed {
-                endpoint: entry.endpoint.url.clone(),
+                endpoint: entry.endpoint.tag().to_string(),
                 message: format!("request serialize failed: {e}"),
             })?;
             let req_bytes = body.len();
@@ -475,9 +513,9 @@ impl RpcPool {
                         Ok(RawOutcome::Result(value)) => {
                             entry.health.record_success(latency);
                             self.inner.metrics.on_success(tag, method, latency);
+                            // Never log the key-bearing URL - only the tag.
                             tracing::debug!(
                                 endpoint = %tag,
-                                url = %entry.endpoint.url,
                                 method = %method,
                                 latency_ms = %latency.as_millis(),
                                 req_bytes,
@@ -513,13 +551,16 @@ impl RpcPool {
                                 error = %msg,
                                 "rpc parse/response error, failing over"
                             );
-                            attempts.push((entry.endpoint.url.clone(), msg));
+                            attempts.push((tag.to_string(), msg));
                             continue;
                         }
                     }
                 }
                 Err(transport_err) => {
                     let latency = start.elapsed();
+                    // The raw error may embed a key-bearing url_key URL; scrub it
+                    // before it reaches health/last_error, metrics, logs, or attempts.
+                    let transport_err = entry.endpoint.scrub_url(&transport_err);
                     entry.health.record_failure(&transport_err, latency);
                     self.inner
                         .metrics
@@ -531,7 +572,7 @@ impl RpcPool {
                         error = %transport_err,
                         "rpc transport error, failing over"
                     );
-                    attempts.push((entry.endpoint.url.clone(), transport_err));
+                    attempts.push((tag.to_string(), transport_err));
                     continue;
                 }
             }
@@ -577,11 +618,15 @@ impl RpcPool {
     }
 }
 
-/// JSON-friendly pool-entry status used by the RPC settings UI.
+/// JSON-friendly pool-entry status used by the RPC settings UI and `/metrics`.
+///
+/// Carries the *secret-free* [`RpcEndpointStatus`] projection, never the raw
+/// [`RpcEndpoint`]: `/metrics` is unauthenticated, so a resolved `auth` secret
+/// or a key-bearing `url_key` URL must never be serialized here.
 #[derive(Debug, Clone, Serialize)]
 pub struct PoolEntryStatus {
     #[serde(flatten)]
-    pub endpoint: RpcEndpoint,
+    pub endpoint: RpcEndpointStatus,
     pub health: EndpointStatus,
 }
 

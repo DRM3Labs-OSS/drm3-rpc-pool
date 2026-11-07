@@ -292,7 +292,10 @@ async fn success_resets_consecutive_failures() {
 }
 
 #[tokio::test]
-async fn jsonrpc_error_body_counts_as_failure() {
+async fn jsonrpc_error_body_is_relayed_without_failover() {
+    // A well-formed JSON-RPC error envelope is a valid upstream answer, not a
+    // transport failure: call() must surface it as RpcError::JsonRpc, keep the
+    // endpoint healthy, and NOT fail over to the peer.
     let transport = FakeTransport::new(|_url, _body| Ok(rpc_error_body(-32000, "rate limited")));
     let pool = RpcPool::new(
         cfg(&["https://a", "https://b"]),
@@ -302,8 +305,43 @@ async fn jsonrpc_error_body_counts_as_failure() {
     )
     .unwrap();
     let err = pool.call("eth_blockNumber", json!([])).await.unwrap_err();
-    assert!(matches!(err, RpcError::AllFailed { .. }));
-    assert_eq!(transport.call_count(), 2);
+    match err {
+        RpcError::JsonRpc { code, message, .. } => {
+            assert_eq!(code, -32000);
+            assert_eq!(message, "rate limited");
+        }
+        other => panic!("expected JsonRpc error, got {other:?}"),
+    }
+    // Only the first endpoint was tried, and it counts as a success.
+    assert_eq!(transport.call_count(), 1);
+    let status = pool.status();
+    assert_eq!(status[0].health.total_successes, 1);
+    assert_eq!(status[0].health.consecutive_failures, 0);
+}
+
+#[tokio::test]
+async fn null_result_is_success_not_failure() {
+    // `{"result": null}` (e.g. a pending getTransactionReceipt) is a legitimate
+    // answer: call() returns JSON null, keeps the endpoint healthy, no failover.
+    let transport = FakeTransport::new(|_url, _body| {
+        Ok(serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"result":null})).unwrap())
+    });
+    let pool = RpcPool::new(
+        cfg(&["https://a", "https://b"]),
+        transport.clone(),
+        Arc::new(NoopMetrics),
+        BackoffPolicy::tight(),
+    )
+    .unwrap();
+    let v = pool
+        .call("eth_getTransactionReceipt", json!(["0x0"]))
+        .await
+        .unwrap();
+    assert_eq!(v, json!(null));
+    assert_eq!(transport.call_count(), 1);
+    let status = pool.status();
+    assert_eq!(status[0].health.total_successes, 1);
+    assert_eq!(status[0].health.consecutive_failures, 0);
 }
 
 // ── Metrics ──────────────────────────────────────────────────

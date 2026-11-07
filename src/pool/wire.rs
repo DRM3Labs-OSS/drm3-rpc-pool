@@ -35,22 +35,8 @@ struct JsonRpcErrorBody {
 pub(super) enum ResponseError {
     #[error("invalid json: {0}")]
     InvalidJson(String),
-    #[error("rpc error {code} {message}")]
-    RpcError { code: i64, message: String },
     #[error("no result in response")]
     EmptyResult,
-}
-
-pub(super) fn parse_rpc_response(bytes: &[u8]) -> Result<Value, ResponseError> {
-    let parsed: JsonRpcResponse =
-        serde_json::from_slice(bytes).map_err(|e| ResponseError::InvalidJson(e.to_string()))?;
-    if let Some(err) = parsed.error {
-        return Err(ResponseError::RpcError {
-            code: err.code,
-            message: err.message,
-        });
-    }
-    parsed.result.ok_or(ResponseError::EmptyResult)
 }
 
 /// A JSON-RPC error envelope relayed verbatim from an upstream. Distinct from a
@@ -72,9 +58,14 @@ pub(super) enum RawOutcome {
     RpcError(UpstreamRpcError),
 }
 
-/// Classify a proxy response body. Used by the failover-relay path: only
-/// invalid JSON triggers failover; both `result` and `error` envelopes are
-/// considered a usable upstream answer.
+/// Classify a response body. Used by both [`RpcPool::call`] and
+/// [`RpcPool::forward`]: only invalid JSON triggers failover; both `result`
+/// and `error` envelopes are a usable upstream answer. A present-but-null
+/// `result` surfaces as [`ResponseError::EmptyResult`], which callers treat as
+/// a valid null answer, not a failure.
+///
+/// [`RpcPool::call`]: super::RpcPool::call
+/// [`RpcPool::forward`]: super::RpcPool::forward
 pub(super) fn classify_response(bytes: &[u8]) -> Result<RawOutcome, ResponseError> {
     let parsed: JsonRpcResponse =
         serde_json::from_slice(bytes).map_err(|e| ResponseError::InvalidJson(e.to_string()))?;

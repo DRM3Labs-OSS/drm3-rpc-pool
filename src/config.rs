@@ -33,6 +33,18 @@ impl Auth {
         }
     }
 
+    /// The auth *mode* as a non-secret label (`"none"`, `"url_key"`,
+    /// `"header"`, `"bearer"`). Safe to expose on status/metrics surfaces; the
+    /// resolved secret itself is never included.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Auth::None => "none",
+            Auth::UrlKey => "url_key",
+            Auth::Header { .. } => "header",
+            Auth::Bearer { .. } => "bearer",
+        }
+    }
+
     /// Expand `${ENV_VAR}` references inside every string field.
     fn resolve_env(&mut self) -> Result<(), RpcError> {
         match self {
@@ -155,6 +167,45 @@ impl RpcEndpoint {
         self.label.as_deref().unwrap_or(&self.url)
     }
 
+    /// Display-safe URL. For [`Auth::UrlKey`] endpoints the key is baked into
+    /// the URL, so the key-bearing segment is masked (`.../v2/SECRET` ->
+    /// `.../v2/***`) and any query/fragment dropped. For every other auth mode
+    /// the URL carries no secret and is returned unchanged. Use this anywhere a
+    /// URL might reach a log, metric, or error surface.
+    pub fn redacted_url(&self) -> String {
+        if matches!(self.auth, Auth::UrlKey) {
+            redact_url_key(&self.url)
+        } else {
+            self.url.clone()
+        }
+    }
+
+    /// Scrub this endpoint's (possibly key-bearing) URL out of a transport
+    /// error string before it reaches a log, the `attempts` list, or the stored
+    /// `last_error`. Only `url_key` endpoints carry a secret in the URL, so
+    /// other modes return the message unchanged.
+    pub fn scrub_url(&self, message: &str) -> String {
+        if matches!(self.auth, Auth::UrlKey) {
+            message.replace(self.url.as_str(), &self.redacted_url())
+        } else {
+            message.to_string()
+        }
+    }
+
+    /// Secret-free projection for status / metrics surfaces. Never carries the
+    /// resolved `auth` secret, and redacts the key segment of a `url_key` URL.
+    pub fn status_view(&self) -> RpcEndpointStatus {
+        RpcEndpointStatus {
+            url: self.redacted_url(),
+            label: self.label.clone(),
+            priority: self.priority,
+            capabilities: self.capabilities.clone(),
+            max_rps: self.max_rps,
+            max_in_flight: self.max_in_flight,
+            auth_kind: self.auth.kind(),
+        }
+    }
+
     /// Whether this endpoint can serve a given capability.
     ///
     /// An empty capability list is treated as "supports everything" - this
@@ -165,6 +216,41 @@ impl RpcEndpoint {
         }
         self.capabilities.iter().any(|c| c == capability)
     }
+}
+
+/// Mask the key-bearing segment of a `url_key` URL. Drops any query/fragment
+/// (a key can ride in `?apikey=` too) and replaces the final path segment with
+/// `***`, so `https://host/v2/SECRET` -> `https://host/v2/***`. Best-effort: if
+/// no path segment is present the whole thing collapses to `***`.
+fn redact_url_key(url: &str) -> String {
+    let base = url.split(['?', '#']).next().unwrap_or(url);
+    match base.rfind('/') {
+        Some(i) if i + 1 < base.len() => format!("{}/***", &base[..i]),
+        _ => "***".to_string(),
+    }
+}
+
+/// Secret-free projection of an [`RpcEndpoint`] for status / metrics surfaces.
+///
+/// `/metrics` is unauthenticated, so it must never serialize a resolved secret.
+/// This omits [`Auth`] entirely (a `Bearer` token or `Header` value is a
+/// secret) and redacts the key segment of a `url_key` URL. Only the non-secret
+/// auth *mode* is exposed, as `auth_kind`.
+#[derive(Debug, Clone, Serialize)]
+pub struct RpcEndpointStatus {
+    /// Endpoint URL, with any `url_key` key segment redacted.
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub priority: u32,
+    pub capabilities: Vec<RpcCapability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_rps: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_in_flight: Option<u32>,
+    /// Auth mode only (`"none"`, `"url_key"`, `"header"`, `"bearer"`) - never
+    /// the resolved token or header value.
+    pub auth_kind: &'static str,
 }
 
 /// Default proxy listen address used when the config omits `listen`.
